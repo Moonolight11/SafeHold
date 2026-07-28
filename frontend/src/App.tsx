@@ -1,24 +1,32 @@
 import React, { useState, useEffect } from 'react';
 
 // ============================================================
-// ГЛОБАЛЬНЫЕ ТИПЫ
+// ТИПЫ ДАННЫХ
 // ============================================================
-interface Deal {
-  id: number;
-  title: string;
-  amount: number;
-  role: 'buyer' | 'seller';
-  opponent: string;
-  category: string;
-  status: 'created' | 'accepted' | 'deposited' | 'completed' | 'disputed';
-  description?: string;
-}
-
-interface InventoryItem {
+interface NFTItem {
   id: number;
   name: string;
-  status: string;
+  rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
   price: number;
+  image: string;
+  status: 'available' | 'in_escrow' | 'transferred';
+  mintNumber: string;
+}
+
+interface DealHistory {
+  id: number;
+  nftName: string;
+  from: string;
+  to: string;
+  date: string;
+  status: 'completed' | 'pending';
+}
+
+interface Referral {
+  id: number;
+  username: string;
+  date: string;
+  bonus: number;
 }
 
 // ============================================================
@@ -28,48 +36,53 @@ const App: React.FC = () => {
   // ------------------------------------------------------------
   // СОСТОЯНИЯ
   // ------------------------------------------------------------
-  const [currentTab, setCurrentTab] = useState<'deals' | 'create' | 'wallet' | 'exchange' | 'inventory' | 'profile'>('deals');
+  const [currentTab, setCurrentTab] = useState<'exchange' | 'inventory' | 'profile'>('exchange');
   const [tgUser, setTgUser] = useState<any>(null);
 
-  // --- Сделки ---
-  const [deals, setDeals] = useState<Deal[]>([
-    { id: 1, title: 'Аккаунт Fortnite', amount: 85, role: 'seller', opponent: '@john_doe', category: 'Игры', status: 'created' },
-    { id: 2, title: 'Логотип для бренда', amount: 120, role: 'buyer', opponent: '@design_pro', category: 'Дизайн', status: 'deposited' },
-    { id: 3, title: 'Бот для Telegram', amount: 250, role: 'seller', opponent: '@coder_dev', category: 'Кодинг', status: 'completed' }
-  ]);
-  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
-  const [showDealModal, setShowDealModal] = useState(false);
-
-  // --- Создание ---
-  const [createForm, setCreateForm] = useState({
-    title: '',
-    amount: '',
-    role: 'seller' as 'buyer' | 'seller',
-    opponent: '',
-    category: 'Игры',
-    description: ''
-  });
-
-  // --- Кошелёк ---
-  const [balance, setBalance] = useState({ available: 1240.50, frozen: 350.00 });
-  const [depositAmount, setDepositAmount] = useState('');
-  const [depositNetwork, setDepositNetwork] = useState('TRC-20');
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawAddress, setWithdrawAddress] = useState('');
-
-  // --- Обменник ---
-  const [exchangeFrom, setExchangeFrom] = useState({ amount: '', currency: 'USDT' });
-  const [exchangeTo, setExchangeTo] = useState({ amount: '', currency: 'RUB' });
-  const exchangeRate = 92.5;
+  // --- Обмен ---
+  const [selectedNFT, setSelectedNFT] = useState<NFTItem | null>(null);
+  const [recipientUsername, setRecipientUsername] = useState('');
+  const [exchangeStatus, setExchangeStatus] = useState<'idle' | 'ready' | 'processing' | 'completed'>('idle');
+  const [progress, setProgress] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
 
   // --- Инвентарь ---
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([
-    { id: 1, name: 'Аккаунт Steam', status: 'В сейфе гаранта', price: 60 },
-    { id: 2, name: 'Дизайн-пак', status: 'Готов к выдаче', price: 45 },
-    { id: 3, name: 'Скрипт парсинга', status: 'В сейфе гаранта', price: 120 }
+  const [inventory, setInventory] = useState<NFTItem[]>([
+    { id: 1, name: 'Снежный Шар', rarity: 'Epic', price: 250, image: '❄️', status: 'available', mintNumber: '#1245' },
+    { id: 2, name: 'Рождественская Елка', rarity: 'Rare', price: 180, image: '🎄', status: 'in_escrow', mintNumber: '#1246' },
+    { id: 3, name: 'Красный Дракон', rarity: 'Legendary', price: 750, image: '🐉', status: 'available', mintNumber: '#1247' },
+    { id: 4, name: 'Неоновый Сигнал', rarity: 'Rare', price: 210, image: '💡', status: 'available', mintNumber: '#1248' },
+    { id: 5, name: 'Золотой Кубок', rarity: 'Legendary', price: 990, image: '🏆', status: 'transferred', mintNumber: '#1249' },
+    { id: 6, name: 'Кибер-Панк Очки', rarity: 'Epic', price: 320, image: '🕶️', status: 'in_escrow', mintNumber: '#1250' },
   ]);
-  const [newItemName, setNewItemName] = useState('');
-  const [newItemPrice, setNewItemPrice] = useState('');
+
+  // --- Каталог всех NFT ---
+  const allNFTs: NFTItem[] = [
+    { id: 101, name: 'Снежный Шар', rarity: 'Epic', price: 250, image: '❄️', status: 'available', mintNumber: '#1245' },
+    { id: 102, name: 'Рождественская Елка', rarity: 'Rare', price: 180, image: '🎄', status: 'available', mintNumber: '#1246' },
+    { id: 103, name: 'Красный Дракон', rarity: 'Legendary', price: 750, image: '🐉', status: 'available', mintNumber: '#1247' },
+    { id: 104, name: 'Неоновый Сигнал', rarity: 'Rare', price: 210, image: '💡', status: 'available', mintNumber: '#1248' },
+    { id: 105, name: 'Золотой Кубок', rarity: 'Legendary', price: 990, image: '🏆', status: 'available', mintNumber: '#1249' },
+    { id: 106, name: 'Кибер-Панк Очки', rarity: 'Epic', price: 320, image: '🕶️', status: 'available', mintNumber: '#1250' },
+    { id: 107, name: 'Розовый Фламинго', rarity: 'Rare', price: 160, image: '🦩', status: 'available', mintNumber: '#1251' },
+    { id: 108, name: 'Звездная Пыль', rarity: 'Epic', price: 280, image: '✨', status: 'available', mintNumber: '#1252' },
+  ];
+
+  // --- История сделок ---
+  const [dealHistory, setDealHistory] = useState<DealHistory[]>([
+    { id: 1, nftName: 'Красный Дракон', from: '@john_doe', to: '@jane_smith', date: '12.07.2026', status: 'completed' },
+    { id: 2, nftName: 'Золотой Кубок', from: '@mike_rogers', to: '@alex_johnson', date: '10.07.2026', status: 'completed' },
+  ]);
+
+  // --- Профиль ---
+  const [referrals, setReferrals] = useState<Referral[]>([
+    { id: 1, username: '@friend_one', date: '01.07.2026', bonus: 15 },
+    { id: 2, username: '@friend_two', date: '03.07.2026', bonus: 10 },
+    { id: 3, username: '@friend_three', date: '05.07.2026', bonus: 20 },
+  ]);
+  const [referralBonus, setReferralBonus] = useState(45);
+  const [referralLink, setReferralLink] = useState('t.me/safehold_garant_bot?start=ref_12345');
+  const [copyStatus, setCopyStatus] = useState('');
 
   // ------------------------------------------------------------
   // ЭФФЕКТЫ
@@ -84,57 +97,116 @@ const App: React.FC = () => {
   }, []);
 
   // ------------------------------------------------------------
-  // ЛОГИКА
+  // ЛОГИКА ОБМЕНА
   // ------------------------------------------------------------
-  const handleCreateDeal = () => {
-    const newDeal: Deal = {
-      id: Date.now(),
-      title: createForm.title,
-      amount: parseFloat(createForm.amount) || 0,
-      role: createForm.role,
-      opponent: createForm.opponent,
-      category: createForm.category,
-      status: 'created',
-      description: createForm.description
-    };
-    setDeals([newDeal, ...deals]);
-    setCreateForm({ title: '', amount: '', role: 'seller', opponent: '', category: 'Игры', description: '' });
-    setCurrentTab('deals');
+  const handleSelectNFT = (nft: NFTItem) => {
+    setSelectedNFT(nft);
+    setExchangeStatus('idle');
+    setProgress(0);
   };
 
-  const handleDealAction = (dealId: number, action: 'deposit' | 'release' | 'dispute') => {
-    setDeals(deals.map(deal => {
-      if (deal.id === dealId) {
-        let newStatus = deal.status;
-        if (action === 'deposit' && deal.status === 'accepted') newStatus = 'deposited';
-        if (action === 'release' && deal.status === 'deposited') newStatus = 'completed';
-        if (action === 'dispute' && (deal.status === 'deposited' || deal.status === 'accepted')) newStatus = 'disputed';
-        return { ...deal, status: newStatus };
-      }
-      return deal;
-    }));
-    setSelectedDeal(null);
-    setShowDealModal(false);
+  const handleInitiateExchange = () => {
+    if (!selectedNFT || !recipientUsername) {
+      alert('Пожалуйста, выберите NFT и укажите получателя');
+      return;
+    }
+
+    setIsLoading(true);
+    setExchangeStatus('processing');
+    setProgress(0);
+
+    // Симуляция прогресса
+    const interval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          // Завершаем обмен
+          const updatedInventory = inventory.map(item =>
+            item.id === selectedNFT.id ? { ...item, status: 'transferred' } : item
+          );
+          setInventory(updatedInventory);
+
+          // Добавляем в историю
+          const newDeal: DealHistory = {
+            id: Date.now(),
+            nftName: selectedNFT.name,
+            from: tgUser?.username || 'anonymous',
+            to: recipientUsername,
+            date: new Date().toLocaleDateString('ru-RU'),
+            status: 'completed'
+          };
+          setDealHistory([newDeal, ...dealHistory]);
+
+          setExchangeStatus('completed');
+          setIsLoading(false);
+          setSelectedNFT(null);
+          setRecipientUsername('');
+          return 100;
+        }
+        return prev + 5;
+      });
+    }, 80);
+  };
+
+  // ------------------------------------------------------------
+  // ЛОГИКА РЕФЕРАЛКИ
+  // ------------------------------------------------------------
+  const handleCopyReferralLink = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(referralLink).then(() => {
+        setCopyStatus('Скопировано!');
+        setTimeout(() => setCopyStatus(''), 3000);
+      }).catch(() => {
+        // Fallback
+        const textArea = document.createElement('textarea');
+        textArea.value = referralLink;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        setCopyStatus('Скопировано!');
+        setTimeout(() => setCopyStatus(''), 3000);
+      });
+    } else {
+      // Fallback для старых браузеров
+      const textArea = document.createElement('textarea');
+      textArea.value = referralLink;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopyStatus('Скопировано!');
+      setTimeout(() => setCopyStatus(''), 3000);
+    }
+  };
+
+  // ------------------------------------------------------------
+  // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+  // ------------------------------------------------------------
+  const getRarityColor = (rarity: string) => {
+    switch (rarity) {
+      case 'Common': return '#6b7280';
+      case 'Rare': return '#3b82f6';
+      case 'Epic': return '#8b5cf6';
+      case 'Legendary': return '#f59e0b';
+      default: return '#6b7280';
+    }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'created': return '#fbbf24';
-      case 'accepted': return '#60a5fa';
-      case 'deposited': return '#00f3ff';
-      case 'completed': return '#10b981';
-      case 'disputed': return '#ef4444';
+      case 'available': return '#10b981';
+      case 'in_escrow': return '#00f3ff';
+      case 'transferred': return '#6b7280';
       default: return '#6b7280';
     }
   };
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'created': return 'Создана';
-      case 'accepted': return 'Принята';
-      case 'deposited': return 'Депозит внесён';
-      case 'completed': return 'Завершена';
-      case 'disputed': return 'Спор';
+      case 'available': return 'Доступен';
+      case 'in_escrow': return 'В сейфе гаранта';
+      case 'transferred': return 'Передан';
       default: return status;
     }
   };
@@ -142,307 +214,442 @@ const App: React.FC = () => {
   // ------------------------------------------------------------
   // РЕНДЕР ВКЛАДОК
   // ------------------------------------------------------------
-  const renderDealsTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Статистика */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-        <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '12px', textAlign: 'center' }}>
-          <div style={{ color: '#6b7280', fontSize: '12px' }}>Активных</div>
-          <div style={{ color: '#00f3ff', fontWeight: 'bold', fontSize: '20px' }}>{deals.filter(d => d.status !== 'completed' && d.status !== 'disputed').length}</div>
-        </div>
-        <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '12px', textAlign: 'center' }}>
-          <div style={{ color: '#6b7280', fontSize: '12px' }}>Завершено</div>
-          <div style={{ color: '#10b981', fontWeight: 'bold', fontSize: '20px' }}>{deals.filter(d => d.status === 'completed').length}</div>
-        </div>
-        <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '12px', textAlign: 'center' }}>
-          <div style={{ color: '#6b7280', fontSize: '12px' }}>Споры</div>
-          <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '20px' }}>{deals.filter(d => d.status === 'disputed').length}</div>
+  const renderExchangeTab = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#00f3ff', letterSpacing: '-0.5px' }}>
+        🤝 Создать сделку
+      </div>
+
+      {/* Трехполосная витрина */}
+      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '12px', alignItems: 'stretch' }}>
+          {/* Отправитель */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ background: '#1a142f', borderRadius: '12px', padding: '12px', textAlign: 'center', border: '1px solid #231c3c' }}>
+              <div style={{ fontSize: '32px' }}>{tgUser?.first_name?.[0] || '👤'}</div>
+              <div style={{ fontSize: '12px', color: '#ffffff', fontWeight: '500' }}>@{tgUser?.username || 'you'}</div>
+            </div>
+            <div style={{
+              background: exchangeStatus === 'ready' || exchangeStatus === 'completed' ? '#10b98120' : '#1a142f',
+              border: `1px solid ${exchangeStatus === 'ready' || exchangeStatus === 'completed' ? '#10b981' : '#231c3c'}`,
+              borderRadius: '12px',
+              padding: '8px',
+              textAlign: 'center',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              color: exchangeStatus === 'ready' || exchangeStatus === 'completed' ? '#10b981' : '#6b7280',
+              transition: 'all 0.3s'
+            }}>
+              {exchangeStatus === 'ready' || exchangeStatus === 'completed' ? '🟢 ГОТОВ' : '⏳ ОЖИДАНИЕ'}
+            </div>
+          </div>
+
+          {/* Центр - выбранный NFT */}
+          <div style={{
+            background: '#1a142f',
+            borderRadius: '12px',
+            padding: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: selectedNFT ? `2px solid ${getRarityColor(selectedNFT.rarity)}` : '2px dashed #231c3c',
+            transition: 'all 0.4s',
+            boxShadow: selectedNFT ? `0 0 30px ${getRarityColor(selectedNFT.rarity)}40` : 'none',
+            minHeight: '100px'
+          }}>
+            {selectedNFT ? (
+              <>
+                <div style={{ fontSize: '48px', animation: 'pulseGlow 2s infinite' }}>{selectedNFT.image}</div>
+                <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffffff', marginTop: '4px' }}>{selectedNFT.name}</div>
+                <div style={{ fontSize: '12px', color: getRarityColor(selectedNFT.rarity) }}>{selectedNFT.rarity}</div>
+                <div style={{ fontSize: '10px', color: '#6b7280' }}>Mint {selectedNFT.mintNumber}</div>
+              </>
+            ) : (
+              <div style={{ color: '#6b7280', fontSize: '14px' }}>Выберите NFT ниже</div>
+            )}
+          </div>
+
+          {/* Получатель */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <input
+              type="text"
+              value={recipientUsername}
+              onChange={(e) => setRecipientUsername(e.target.value)}
+              placeholder="@username"
+              style={{
+                width: '100%',
+                background: '#1a142f',
+                border: '1px solid #231c3c',
+                borderRadius: '12px',
+                padding: '12px',
+                color: '#ffffff',
+                fontSize: '14px',
+                outline: 'none',
+                transition: 'border 0.2s'
+              }}
+              onFocus={(e) => e.currentTarget.style.border = '1px solid #00f3ff'}
+              onBlur={(e) => e.currentTarget.style.border = '1px solid #231c3c'}
+            />
+            <div style={{
+              background: '#1a142f',
+              border: '1px solid #231c3c',
+              borderRadius: '12px',
+              padding: '8px',
+              textAlign: 'center',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              color: '#6b7280'
+            }}>
+              ⏳ ОЖИДАНИЕ ТОВАРА
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Список сделок */}
-      {deals.length === 0 ? (
-        <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '32px', textAlign: 'center' }}>
-          <div style={{ color: '#6b7280' }}>Нет сделок</div>
-          <div style={{ color: '#4b5563', fontSize: '14px' }}>Создайте первую сделку</div>
+      {/* Каталог NFT */}
+      <div>
+        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#bf77ff', marginBottom: '12px' }}>
+          🎁 Выбрать NFT для обмена
         </div>
-      ) : (
-        deals.map(deal => (
-          <div key={deal.id} style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <div style={{ fontWeight: 'bold', color: '#ffffff' }}>{deal.title}</div>
-                <div style={{ color: '#6b7280', fontSize: '12px' }}>#{deal.id} • {deal.category}</div>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                  <span style={{ fontSize: '12px', padding: '2px 12px', borderRadius: '20px', border: `1px solid ${getStatusColor(deal.status)}30`, color: getStatusColor(deal.status) }}>
-                    {getStatusLabel(deal.status)}
-                  </span>
-                  <span style={{ fontSize: '12px', color: '#6b7280' }}>{deal.role === 'buyer' ? 'Покупатель' : 'Продавец'}</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+          {allNFTs.map(nft => (
+            <div
+              key={nft.id}
+              onClick={() => handleSelectNFT(nft)}
+              style={{
+                background: selectedNFT?.id === nft.id ? '#00f3ff20' : '#141023',
+                border: selectedNFT?.id === nft.id ? `2px solid #00f3ff` : '1px solid #231c3c',
+                borderRadius: '16px',
+                padding: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.3s',
+                boxShadow: selectedNFT?.id === nft.id ? '0 0 20px rgba(0, 243, 255, 0.2)' : 'none'
+              }}
+              onMouseEnter={(e) => { if (selectedNFT?.id !== nft.id) e.currentTarget.style.border = '1px solid #00f3ff40'; }}
+              onMouseLeave={(e) => { if (selectedNFT?.id !== nft.id) e.currentTarget.style.border = '1px solid #231c3c'; }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '28px' }}>{nft.image}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#ffffff' }}>{nft.name}</div>
+                  <div style={{ fontSize: '10px', color: getRarityColor(nft.rarity) }}>{nft.rarity}</div>
+                  <div style={{ fontSize: '10px', color: '#6b7280' }}>{nft.price} USDT</div>
                 </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 'bold', color: '#00f3ff' }}>{deal.amount} USDT</div>
-                <div style={{ color: '#6b7280', fontSize: '12px' }}>{deal.opponent}</div>
-              </div>
+              <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>Mint {nft.mintNumber}</div>
             </div>
-            <button
-              onClick={() => { setSelectedDeal(deal); setShowDealModal(true); }}
-              style={{ width: '100%', marginTop: '12px', background: '#00f3ff20', color: '#00f3ff', border: '1px solid #00f3ff40', borderRadius: '12px', padding: '8px', fontWeight: '500', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#00f3ff30'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = '#00f3ff20'; }}
-            >
-              Управлять
-            </button>
-          </div>
-        ))
-      )}
-
-      {/* Модалка сделки */}
-      {showDealModal && selectedDeal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 50, padding: '16px' }}>
-          <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '24px', width: '100%', maxWidth: '400px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ffffff' }}>{selectedDeal.title}</div>
-              <button onClick={() => setShowDealModal(false)} style={{ color: '#6b7280', fontSize: '24px', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ color: '#6b7280', fontSize: '14px' }}>Сумма: <span style={{ color: '#00f3ff', fontWeight: 'bold' }}>{selectedDeal.amount} USDT</span></div>
-              <div style={{ color: '#6b7280', fontSize: '14px' }}>Оппонент: <span style={{ color: '#ffffff' }}>{selectedDeal.opponent}</span></div>
-              <div style={{ color: '#6b7280', fontSize: '14px' }}>Статус: <span style={{ color: getStatusColor(selectedDeal.status) }}>{getStatusLabel(selectedDeal.status)}</span></div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {selectedDeal.status === 'created' && (
-                <button onClick={() => handleDealAction(selectedDeal.id, 'deposit')} style={{ background: '#00f3ff', color: '#000000', fontWeight: 'bold', padding: '12px', borderRadius: '12px', border: 'none', cursor: 'pointer', boxShadow: '0 0 20px rgba(0, 243, 255, 0.25)', transition: 'all 0.2s' }}>
-                  Внести депозит
-                </button>
-              )}
-              {selectedDeal.status === 'deposited' && (
-                <button onClick={() => handleDealAction(selectedDeal.id, 'release')} style={{ background: '#10b981', color: '#000000', fontWeight: 'bold', padding: '12px', borderRadius: '12px', border: 'none', cursor: 'pointer', boxShadow: '0 0 20px rgba(16, 185, 129, 0.25)', transition: 'all 0.2s' }}>
-                  Подтвердить получение
-                </button>
-              )}
-              {(selectedDeal.status === 'accepted' || selectedDeal.status === 'deposited') && (
-                <button onClick={() => handleDealAction(selectedDeal.id, 'dispute')} style={{ background: '#ef444420', color: '#ef4444', border: '1px solid #ef444440', fontWeight: 'bold', padding: '12px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s' }}>
-                  Открыть спор
-                </button>
-              )}
-              <button onClick={() => setShowDealModal(false)} style={{ background: '#ffffff10', color: '#6b7280', fontWeight: '500', padding: '12px', borderRadius: '12px', border: '1px solid #ffffff20', cursor: 'pointer', transition: 'all 0.2s' }}>
-                Закрыть
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  const renderCreateTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#00f3ff' }}>🚀 Создать сделку</div>
-      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div>
-          <label style={{ color: '#6b7280', fontSize: '14px', display: 'block', marginBottom: '4px' }}>Название товара</label>
-          <input type="text" value={createForm.title} onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })} style={{ width: '100%', background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none', transition: 'border 0.2s' }} placeholder="Например: Аккаунт Valorant" onFocus={(e) => e.currentTarget.style.border = '1px solid #00f3ff'} onBlur={(e) => e.currentTarget.style.border = '1px solid #231c3c'} />
-        </div>
-        <div>
-          <label style={{ color: '#6b7280', fontSize: '14px', display: 'block', marginBottom: '4px' }}>Сумма (USDT)</label>
-          <input type="number" value={createForm.amount} onChange={(e) => setCreateForm({ ...createForm, amount: e.target.value })} style={{ width: '100%', background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none', transition: 'border 0.2s' }} placeholder="100" min="1" onFocus={(e) => e.currentTarget.style.border = '1px solid #00f3ff'} onBlur={(e) => e.currentTarget.style.border = '1px solid #231c3c'} />
-        </div>
-        <div>
-          <label style={{ color: '#6b7280', fontSize: '14px', display: 'block', marginBottom: '4px' }}>Твоя роль</label>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {['seller', 'buyer'].map(role => (
-              <button key={role} onClick={() => setCreateForm({ ...createForm, role: role as 'buyer' | 'seller' })} style={{ flex: 1, padding: '10px', borderRadius: '12px', fontWeight: '500', border: '1px solid #231c3c', cursor: 'pointer', transition: 'all 0.2s', background: createForm.role === role ? '#00f3ff20' : '#1a142f', color: createForm.role === role ? '#00f3ff' : '#6b7280' }}>
-                {role === 'seller' ? 'Я Продавец' : 'Я Покупатель'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label style={{ color: '#6b7280', fontSize: '14px', display: 'block', marginBottom: '4px' }}>Юзернейм оппонента</label>
-          <input type="text" value={createForm.opponent} onChange={(e) => setCreateForm({ ...createForm, opponent: e.target.value })} style={{ width: '100%', background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none', transition: 'border 0.2s' }} placeholder="@username" onFocus={(e) => e.currentTarget.style.border = '1px solid #00f3ff'} onBlur={(e) => e.currentTarget.style.border = '1px solid #231c3c'} />
-        </div>
-        <div>
-          <label style={{ color: '#6b7280', fontSize: '14px', display: 'block', marginBottom: '4px' }}>Категория</label>
-          <select value={createForm.category} onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })} style={{ width: '100%', background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none' }}>
-            <option>Игры</option>
-            <option>Дизайн</option>
-            <option>Кодинг</option>
-            <option>Аккаунты</option>
-            <option>Другое</option>
-          </select>
-        </div>
-        <div>
-          <label style={{ color: '#6b7280', fontSize: '14px', display: 'block', marginBottom: '4px' }}>Описание (опционально)</label>
-          <textarea value={createForm.description} onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })} style={{ width: '100%', background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none', resize: 'vertical', minHeight: '80px' }} placeholder="Условия сделки..." />
-        </div>
-        <button onClick={handleCreateDeal} style={{ background: '#00f3ff', color: '#000000', fontWeight: 'bold', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', boxShadow: '0 0 25px rgba(0, 243, 255, 0.3)', transition: 'all 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 0 40px rgba(0, 243, 255, 0.5)'} onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 0 25px rgba(0, 243, 255, 0.3)'}>
-          Открыть безопасную сделку
-        </button>
-      </div>
-    </div>
-  );
-
-  const renderWalletTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#10b981' }}>💼 Кошелёк</div>
-      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ color: '#6b7280', fontSize: '14px' }}>Доступно</div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#00f3ff' }}>{balance.available.toFixed(2)} USDT</div>
-            <div style={{ color: '#6b7280', fontSize: '12px' }}>≈ {(balance.available * 92.5).toFixed(0)} RUB</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ color: '#6b7280', fontSize: '14px' }}>Заморожено</div>
-            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#bf77ff' }}>{balance.frozen.toFixed(2)} USDT</div>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px' }}>
-        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ffffff' }}>📥 Пополнить</div>
-        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-          {['TRC-20', 'TON', 'СБП'].map(net => (
-            <button key={net} onClick={() => setDepositNetwork(net)} style={{ padding: '6px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: '500', border: '1px solid #231c3c', cursor: 'pointer', transition: 'all 0.2s', background: depositNetwork === net ? '#00f3ff20' : '#1a142f', color: depositNetwork === net ? '#00f3ff' : '#6b7280' }}>
-              {net}
-            </button>
           ))}
         </div>
-        <div style={{ marginTop: '8px', background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px' }}>
-          <div style={{ color: '#6b7280', fontSize: '12px' }}>Адрес для {depositNetwork}</div>
-          <div style={{ color: '#00f3ff', fontSize: '14px', fontFamily: 'monospace', wordBreak: 'break-all' }}>TQY...7kLp</div>
-        </div>
-        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-          <input type="number" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} style={{ flex: 1, background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none' }} placeholder="Сумма" />
-          <button onClick={() => { if (depositAmount) { setBalance({ ...balance, available: balance.available + parseFloat(depositAmount) }); setDepositAmount(''); } }} style={{ background: '#00f3ff', color: '#000000', fontWeight: 'bold', padding: '12px 24px', borderRadius: '12px', border: 'none', cursor: 'pointer', boxShadow: '0 0 20px rgba(0, 243, 255, 0.25)' }}>
-            Пополнить
-          </button>
-        </div>
       </div>
 
-      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px' }}>
-        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ffffff' }}>📤 Вывести</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-          <input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} style={{ width: '100%', background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none' }} placeholder="Сумма" />
-          <input type="text" value={withdrawAddress} onChange={(e) => setWithdrawAddress(e.target.value)} style={{ width: '100%', background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none' }} placeholder="Адрес кошелька" />
-          <button onClick={() => { if (withdrawAmount && withdrawAddress) { const amount = parseFloat(withdrawAmount); if (amount <= balance.available) { setBalance({ ...balance, available: balance.available - amount }); setWithdrawAmount(''); setWithdrawAddress(''); } else { alert('Недостаточно средств'); } } }} style={{ background: '#bf77ff', color: '#000000', fontWeight: 'bold', padding: '12px', borderRadius: '12px', border: 'none', cursor: 'pointer', boxShadow: '0 0 20px rgba(191, 119, 255, 0.25)' }}>
-            Вывести
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderExchangeTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#bf77ff' }}>💱 Обмен</div>
-      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div>
-          <label style={{ color: '#6b7280', fontSize: '14px', display: 'block', marginBottom: '4px' }}>Вы отдаёте</label>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input type="number" value={exchangeFrom.amount} onChange={(e) => { const val = e.target.value; setExchangeFrom({ ...exchangeFrom, amount: val }); if (val) { const converted = parseFloat(val) * exchangeRate; setExchangeTo({ ...exchangeTo, amount: converted.toFixed(2) }); } else { setExchangeTo({ ...exchangeTo, amount: '' }); } }} style={{ flex: 1, background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none' }} placeholder="0.00" />
-            <select value={exchangeFrom.currency} onChange={(e) => setExchangeFrom({ ...exchangeFrom, currency: e.target.value })} style={{ background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none' }}>
-              <option>USDT</option>
-              <option>BTC</option>
-              <option>TON</option>
-            </select>
+      {/* Кнопка действия и прогресс */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {isLoading && (
+          <div style={{ width: '100%', background: '#1a142f', borderRadius: '12px', height: '6px', overflow: 'hidden' }}>
+            <div style={{
+              width: `${progress}%`,
+              height: '100%',
+              background: 'linear-gradient(90deg, #00f3ff, #bf77ff)',
+              transition: 'width 0.1s linear'
+            }} />
           </div>
-        </div>
-        <div style={{ textAlign: 'center', fontSize: '24px', color: '#6b7280' }}>🔄</div>
-        <div>
-          <label style={{ color: '#6b7280', fontSize: '14px', display: 'block', marginBottom: '4px' }}>Вы получаете</label>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input type="number" value={exchangeTo.amount} onChange={(e) => { const val = e.target.value; setExchangeTo({ ...exchangeTo, amount: val }); if (val) { const converted = parseFloat(val) / exchangeRate; setExchangeFrom({ ...exchangeFrom, amount: converted.toFixed(2) }); } else { setExchangeFrom({ ...exchangeFrom, amount: '' }); } }} style={{ flex: 1, background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none' }} placeholder="0.00" />
-            <select value={exchangeTo.currency} onChange={(e) => setExchangeTo({ ...exchangeTo, currency: e.target.value })} style={{ background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none' }}>
-              <option>RUB</option>
-              <option>USD</option>
-              <option>EUR</option>
-            </select>
-          </div>
-        </div>
-        <div style={{ color: '#6b7280', fontSize: '12px', textAlign: 'center' }}>Курс: 1 USDT ≈ {exchangeRate} RUB</div>
-        <button onClick={() => { if (exchangeFrom.amount) { alert(`Обмен ${exchangeFrom.amount} ${exchangeFrom.currency} → ${exchangeTo.amount} ${exchangeTo.currency} выполнен (демо)`); setExchangeFrom({ ...exchangeFrom, amount: '' }); setExchangeTo({ ...exchangeTo, amount: '' }); } }} style={{ background: '#bf77ff', color: '#000000', fontWeight: 'bold', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', boxShadow: '0 0 25px rgba(191, 119, 255, 0.3)' }}>
-          Обменять
+        )}
+        <button
+          onClick={handleInitiateExchange}
+          disabled={isLoading || !selectedNFT || !recipientUsername}
+          style={{
+            width: '100%',
+            background: 'linear-gradient(135deg, #00f3ff, #bf77ff)',
+            color: '#000000',
+            fontWeight: 'bold',
+            fontSize: '18px',
+            padding: '16px',
+            borderRadius: '12px',
+            border: 'none',
+            cursor: isLoading || !selectedNFT || !recipientUsername ? 'not-allowed' : 'pointer',
+            opacity: isLoading || !selectedNFT || !recipientUsername ? 0.5 : 1,
+            boxShadow: '0 0 30px rgba(0, 243, 255, 0.3)',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            if (!isLoading && selectedNFT && recipientUsername) {
+              e.currentTarget.style.boxShadow = '0 0 50px rgba(0, 243, 255, 0.5)';
+              e.currentTarget.style.transform = 'scale(1.02)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.boxShadow = '0 0 30px rgba(0, 243, 255, 0.3)';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+        >
+          {isLoading ? `Обмен ${progress}%` : '🚀 Инициировать NFT Обмен'}
         </button>
+      </div>
+
+      {/* История сделок */}
+      <div>
+        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10b981', marginBottom: '12px' }}>
+          📋 История обменов
+        </div>
+        {dealHistory.length === 0 ? (
+          <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '24px', textAlign: 'center', color: '#6b7280' }}>
+            Нет завершенных сделок
+          </div>
+        ) : (
+          dealHistory.map(deal => (
+            <div key={deal.id} style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 'bold', color: '#ffffff' }}>{deal.nftName}</div>
+                  <div style={{ fontSize: '12px', color: '#6b7280' }}>{deal.from} → {deal.to}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '12px', color: '#10b981' }}>✅ {deal.status === 'completed' ? 'Завершена' : 'В процессе'}</div>
+                  <div style={{ fontSize: '10px', color: '#6b7280' }}>{deal.date}</div>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
 
   const renderInventoryTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f59e0b' }}>🎒 Сейф / Инвентарь</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f59e0b', letterSpacing: '-0.5px' }}>
+        🎒 Инвентарь
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-        {inventoryItems.map(item => (
-          <div key={item.id} style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '12px' }}>
-            <div style={{ aspectRatio: '1', background: '#1a142f', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px' }}>📦</div>
-            <div style={{ fontWeight: 'bold', color: '#ffffff', fontSize: '14px', marginTop: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
-            <div style={{ color: '#6b7280', fontSize: '12px' }}>{item.price} USDT</div>
-            <div style={{ fontSize: '12px', marginTop: '4px', padding: '2px 12px', borderRadius: '20px', display: 'inline-block', background: item.status === 'В сейфе гаранта' ? '#00f3ff20' : '#10b98120', color: item.status === 'В сейфе гаранта' ? '#00f3ff' : '#10b981' }}>
-              {item.status}
+        {inventory.map(item => (
+          <div key={item.id} style={{
+            background: '#141023',
+            border: `1px solid ${getRarityColor(item.rarity)}40`,
+            borderRadius: '16px',
+            padding: '12px',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: `radial-gradient(circle at 30% 30%, ${getRarityColor(item.rarity)}10, transparent 70%)`,
+              pointerEvents: 'none'
+            }} />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+              <div style={{ fontSize: '48px', marginBottom: '4px' }}>{item.image}</div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffffff' }}>{item.name}</div>
+              <div style={{ fontSize: '12px', color: getRarityColor(item.rarity) }}>{item.rarity}</div>
+              <div style={{ fontSize: '10px', color: '#6b7280' }}>Mint {item.mintNumber}</div>
+              <div style={{
+                fontSize: '12px',
+                marginTop: '8px',
+                padding: '4px 16px',
+                borderRadius: '20px',
+                background: `${getStatusColor(item.status)}20`,
+                color: getStatusColor(item.status),
+                border: `1px solid ${getStatusColor(item.status)}30`
+              }}>
+                {getStatusLabel(item.status)}
+              </div>
+              {item.status === 'available' && (
+                <button
+                  onClick={() => {
+                    setCurrentTab('exchange');
+                    const nftFromInventory = allNFTs.find(n => n.name === item.name);
+                    if (nftFromInventory) handleSelectNFT(nftFromInventory);
+                  }}
+                  style={{
+                    marginTop: '8px',
+                    background: '#00f3ff20',
+                    color: '#00f3ff',
+                    border: '1px solid #00f3ff40',
+                    borderRadius: '12px',
+                    padding: '6px 16px',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    width: '100%'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#00f3ff30'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = '#00f3ff20'}
+                >
+                  Выбрать для сделки
+                </button>
+              )}
             </div>
           </div>
         ))}
-      </div>
-      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px' }}>
-        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ffffff' }}>➕ Добавить товар</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-          <input type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)} style={{ width: '100%', background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none' }} placeholder="Название товара" />
-          <input type="number" value={newItemPrice} onChange={(e) => setNewItemPrice(e.target.value)} style={{ width: '100%', background: '#1a142f', border: '1px solid #231c3c', borderRadius: '12px', padding: '12px', color: '#ffffff', outline: 'none' }} placeholder="Цена в USDT" />
-          <button onClick={() => { if (newItemName && newItemPrice) { setInventoryItems([...inventoryItems, { id: Date.now(), name: newItemName, status: 'В сейфе гаранта', price: parseFloat(newItemPrice) }]); setNewItemName(''); setNewItemPrice(''); } }} style={{ background: '#f59e0b', color: '#000000', fontWeight: 'bold', padding: '12px', borderRadius: '12px', border: 'none', cursor: 'pointer', boxShadow: '0 0 20px rgba(245, 158, 11, 0.25)' }}>
-            Загрузить в хранилище
-          </button>
-        </div>
       </div>
     </div>
   );
 
   const renderProfileTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#bf77ff' }}>👤 Профиль</div>
-      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '24px', textAlign: 'center' }}>
-        <div style={{ width: '96px', height: '96px', margin: '0 auto', borderRadius: '50%', background: 'linear-gradient(135deg, #00f3ff, #bf77ff)', padding: '3px', boxShadow: '0 0 30px rgba(0, 243, 255, 0.3)' }}>
-          <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#141023', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '36px', fontWeight: 'bold', color: '#ffffff' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#bf77ff', letterSpacing: '-0.5px' }}>
+        👤 Профиль
+      </div>
+
+      {/* Аватар и основная информация */}
+      <div style={{
+        background: '#141023',
+        border: '1px solid #231c3c',
+        borderRadius: '16px',
+        padding: '24px',
+        textAlign: 'center',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: -50,
+          right: -50,
+          width: '150px',
+          height: '150px',
+          background: 'radial-gradient(circle, #00f3ff20, transparent 70%)',
+          borderRadius: '50%',
+          pointerEvents: 'none'
+        }} />
+        <div style={{
+          width: '96px',
+          height: '96px',
+          margin: '0 auto',
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #00f3ff, #bf77ff)',
+          padding: '3px',
+          boxShadow: '0 0 40px rgba(0, 243, 255, 0.4)',
+          animation: 'pulseGlow 3s infinite'
+        }}>
+          <div style={{
+            width: '100%',
+            height: '100%',
+            borderRadius: '50%',
+            background: '#141023',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '36px',
+            fontWeight: 'bold',
+            color: '#ffffff'
+          }}>
             {tgUser?.first_name?.[0] || tgUser?.username?.[0] || 'U'}
           </div>
         </div>
-        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ffffff', marginTop: '12px' }}>{tgUser?.first_name || 'Пользователь'} {tgUser?.last_name || ''}</div>
-        <div style={{ color: '#6b7280' }}>@{tgUser?.username || 'нет_username'}</div>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '4px', marginTop: '8px', color: '#fbbf24' }}>
-          {'★'.repeat(5)} <span style={{ color: '#6b7280', marginLeft: '8px', fontSize: '14px' }}>5.0</span>
+        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ffffff', marginTop: '12px' }}>
+          {tgUser?.first_name || 'Пользователь'} {tgUser?.last_name || ''}
         </div>
-        <div style={{ color: '#10b981', fontSize: '14px', marginTop: '4px' }}>✓ 100% успешных сделок</div>
+        <div style={{ color: '#6b7280', fontSize: '14px' }}>@{tgUser?.username || 'нет_username'}</div>
+        <div style={{
+          display: 'inline-block',
+          marginTop: '8px',
+          background: '#bf77ff20',
+          color: '#bf77ff',
+          border: '1px solid #bf77ff40',
+          padding: '2px 16px',
+          borderRadius: '20px',
+          fontSize: '12px',
+          fontWeight: 'bold'
+        }}>
+          ⭐ VIP Верифицирован
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '12px' }}>
+          <div>
+            <div style={{ color: '#fbbf24', fontSize: '18px' }}>⭐ 5.0</div>
+            <div style={{ color: '#6b7280', fontSize: '12px' }}>Рейтинг</div>
+          </div>
+          <div>
+            <div style={{ color: '#10b981', fontSize: '18px' }}>100%</div>
+            <div style={{ color: '#6b7280', fontSize: '12px' }}>Успешность</div>
+          </div>
+          <div>
+            <div style={{ color: '#00f3ff', fontSize: '18px' }}>{dealHistory.length}</div>
+            <div style={{ color: '#6b7280', fontSize: '12px' }}>Обменов</div>
+          </div>
+        </div>
       </div>
 
-      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #231c3c', paddingBottom: '8px' }}>
-          <span style={{ color: '#6b7280' }}>Всего сделок</span>
-          <span style={{ color: '#ffffff', fontWeight: 'bold' }}>{deals.length}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #231c3c', paddingBottom: '8px' }}>
-          <span style={{ color: '#6b7280' }}>Завершено</span>
-          <span style={{ color: '#10b981', fontWeight: 'bold' }}>{deals.filter(d => d.status === 'completed').length}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: '#6b7280' }}>В спорах</span>
-          <span style={{ color: '#ef4444', fontWeight: 'bold' }}>{deals.filter(d => d.status === 'disputed').length}</span>
-        </div>
-      </div>
-
+      {/* Реферальная система */}
       <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px' }}>
-        <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffffff', marginBottom: '8px' }}>🔒 Безопасность</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #231c3c', padding: '8px 0' }}>
-          <span style={{ color: '#6b7280', fontSize: '14px' }}>2FA</span>
-          <span style={{ color: '#10b981', fontSize: '14px' }}>Включена</span>
+        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f59e0b', marginBottom: '12px' }}>
+          🔗 Пригласи друга
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-          <span style={{ color: '#6b7280', fontSize: '14px' }}>Сессии</span>
-          <span style={{ color: '#6b7280', fontSize: '14px' }}>1 активная</span>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+          <input
+            type="text"
+            value={referralLink}
+            readOnly
+            style={{
+              flex: 1,
+              background: '#1a142f',
+              border: '1px solid #231c3c',
+              borderRadius: '12px',
+              padding: '10px',
+              color: '#6b7280',
+              fontSize: '12px',
+              outline: 'none'
+            }}
+          />
+          <button
+            onClick={handleCopyReferralLink}
+            style={{
+              background: '#00f3ff20',
+              color: '#00f3ff',
+              border: '1px solid #00f3ff40',
+              borderRadius: '12px',
+              padding: '10px 16px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#00f3ff30'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#00f3ff20'}
+          >
+            🔗 Копировать
+          </button>
         </div>
+        {copyStatus && (
+          <div style={{ color: '#10b981', fontSize: '14px', textAlign: 'center', marginBottom: '8px' }}>
+            ✅ {copyStatus}
+          </div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1a142f', borderRadius: '12px', padding: '8px 12px', marginBottom: '8px' }}>
+          <span style={{ color: '#6b7280', fontSize: '14px' }}>💰 Заработано бонусов</span>
+          <span style={{ color: '#00f3ff', fontWeight: 'bold', fontSize: '16px' }}>{referralBonus} USDT</span>
+        </div>
+        <div style={{ fontSize: '14px', fontWeight: '500', color: '#ffffff', marginBottom: '8px' }}>
+          Приглашенные друзья:
+        </div>
+        {referrals.map(ref => (
+          <div key={ref.id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #231c3c', padding: '6px 0' }}>
+            <span style={{ color: '#ffffff', fontSize: '14px' }}>{ref.username}</span>
+            <span style={{ color: '#6b7280', fontSize: '12px' }}>{ref.date} • +{ref.bonus} USDT</span>
+          </div>
+        ))}
       </div>
 
-      <button onClick={() => window.open('https://t.me/SafeHold_Support', '_blank')} style={{ background: '#00f3ff20', color: '#00f3ff', border: '1px solid #00f3ff40', fontWeight: 'bold', padding: '14px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = '#00f3ff30'} onMouseLeave={(e) => e.currentTarget.style.background = '#00f3ff20'}>
-        📞 Вызвать арбитраж (@SafeHold_Support)
+      {/* Поддержка */}
+      <button
+        onClick={() => window.open('https://t.me/SafeHold_Support', '_blank')}
+        style={{
+          background: '#00f3ff20',
+          color: '#00f3ff',
+          border: '1px solid #00f3ff40',
+          fontWeight: 'bold',
+          padding: '16px',
+          borderRadius: '12px',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          fontSize: '16px'
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = '#00f3ff30'}
+        onMouseLeave={(e) => e.currentTarget.style.background = '#00f3ff20'}
+      >
+        📞 Связаться с Арбитражем (@SafeHold_Support)
       </button>
     </div>
   );
@@ -451,29 +658,49 @@ const App: React.FC = () => {
   // ОСНОВНАЯ ОТРИСОВКА
   // ------------------------------------------------------------
   return (
-    <div style={{ minHeight: '100vh', background: '#0b0813', color: '#ffffff', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', paddingBottom: '80px' }}>
+    <div style={{
+      minHeight: '100vh',
+      background: '#0b0813',
+      color: '#ffffff',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      paddingBottom: '80px',
+      overflowX: 'hidden',
+      maxWidth: '100vw'
+    }}>
       <div style={{ maxWidth: '420px', margin: '0 auto', padding: '16px 16px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#00f3ff', letterSpacing: '-0.5px' }}>🔐 SafeHold</div>
-          <div style={{ color: '#6b7280', fontSize: '12px' }}>v2.0</div>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#00f3ff', letterSpacing: '-0.5px' }}>
+            🔐 SafeHold NFT
+          </div>
+          <div style={{ color: '#6b7280', fontSize: '12px' }}>v3.0</div>
         </div>
 
-        {currentTab === 'deals' && renderDealsTab()}
-        {currentTab === 'create' && renderCreateTab()}
-        {currentTab === 'wallet' && renderWalletTab()}
         {currentTab === 'exchange' && renderExchangeTab()}
         {currentTab === 'inventory' && renderInventoryTab()}
         {currentTab === 'profile' && renderProfileTab()}
       </div>
 
-      {/* Нижний таб-бар */}
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, maxWidth: '420px', margin: '0 auto', background: '#141023', borderTop: '1px solid #231c3c', display: 'flex', justifyContent: 'space-around', alignItems: 'center', padding: '8px 4px', zIndex: 50, backdropFilter: 'blur(12px)' }}>
+      {/* Нижний таб-бар - 3 кнопки */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        maxWidth: '420px',
+        margin: '0 auto',
+        background: '#141023',
+        borderTop: '1px solid #231c3c',
+        display: 'flex',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        padding: '12px 8px',
+        zIndex: 50,
+        backdropFilter: 'blur(12px)',
+        borderRadius: '24px 24px 0 0'
+      }}>
         {[
-          { id: 'deals', icon: '🤝', label: 'Сделки' },
-          { id: 'create', icon: '➕', label: 'Создать' },
-          { id: 'wallet', icon: '💼', label: 'Кошелёк' },
-          { id: 'exchange', icon: '💱', label: 'Обмен' },
-          { id: 'inventory', icon: '🎒', label: 'Сейф' },
+          { id: 'exchange', icon: '🤝', label: 'Создать сделку' },
+          { id: 'inventory', icon: '🎒', label: 'Инвентарь' },
           { id: 'profile', icon: '👤', label: 'Профиль' }
         ].map(tab => (
           <button
@@ -483,28 +710,67 @@ const App: React.FC = () => {
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              padding: '4px 8px',
-              borderRadius: '12px',
-              background: 'transparent',
-              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '16px',
+              background: currentTab === tab.id ? '#00f3ff20' : 'transparent',
+              border: currentTab === tab.id ? '1px solid #00f3ff40' : '1px solid transparent',
               cursor: 'pointer',
-              transition: 'all 0.2s',
-              color: currentTab === tab.id ? '#00f3ff' : '#6b7280'
+              transition: 'all 0.3s',
+              flex: 1,
+              maxWidth: '120px'
+            }}
+            onMouseEnter={(e) => {
+              if (currentTab !== tab.id) {
+                e.currentTarget.style.background = '#ffffff08';
+                e.currentTarget.style.border = '1px solid #ffffff10';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (currentTab !== tab.id) {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.border = '1px solid transparent';
+              }
             }}
           >
-            <span style={{ fontSize: '24px' }}>{tab.icon}</span>
-            <span style={{ fontSize: '10px', fontWeight: '500', marginTop: '2px' }}>{tab.label}</span>
+            <span style={{ fontSize: '28px' }}>{tab.icon}</span>
+            <span style={{
+              fontSize: '11px',
+              fontWeight: '600',
+              marginTop: '4px',
+              color: currentTab === tab.id ? '#00f3ff' : '#6b7280',
+              transition: 'color 0.3s'
+            }}>
+              {tab.label}
+            </span>
             {currentTab === tab.id && (
-              <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#00f3ff', marginTop: '4px', animation: 'pulse 1.5s infinite' }} />
+              <span style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: '#00f3ff',
+                marginTop: '4px',
+                animation: 'pulseGlow 1.5s infinite'
+              }} />
             )}
           </button>
         ))}
       </div>
 
       <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 1; }
+        @keyframes pulseGlow {
+          0%, 100% { opacity: 0.4; box-shadow: 0 0 10px rgba(0, 243, 255, 0.2); }
+          50% { opacity: 1; box-shadow: 0 0 30px rgba(0, 243, 255, 0.6); }
+        }
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        * {
+          -webkit-tap-highlight-color: transparent;
+        }
+        input, textarea, button {
+          -webkit-appearance: none;
+          appearance: none;
         }
       `}</style>
     </div>
