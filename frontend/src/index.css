@@ -1,3 +1,39 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    background: #0B0F1C;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+  }
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.02);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #00D2FF;
+    border-radius: 10px;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-lg;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .neon-border {
+    box-shadow: 0 0 15px rgba(0,210,255,0.2), inset 0 0 15px rgba(0,210,255,0.05);
+  }
+  .btn-primary {
+    @apply bg-gradient-to-r from-neon-blue to-neon-green text-black font-bold py-3 px-6 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95;
+  }
+  .btn-secondary {
+    @apply bg-white/10 backdrop-blur-sm border border-white/20 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 hover:bg-white/20 active:scale-95;
+  }
+}
