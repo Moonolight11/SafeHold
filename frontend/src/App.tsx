@@ -681,7 +681,23 @@ const App: React.FC = () => {
           <button
             key={tab.id}
             onClick={() => setCurrentTab(tab.id as any)}
-            className={`flex flex-col items-center py-1 px-2 rounded-xl transition-all ${
-              currentTab === tab.id
-                ? 'text-cyan-400 scale-105'
-                : 'text-white/30 hover:text
+                onClick={() => setCurrentTab(tab.id as any)}
+                className={`flex flex-col items-center py-1 px-2 rounded-xl transition-all ${
+                  currentTab === tab.id
+                    ? 'text-cyan-400 scale-105'
+                    : 'text-white/30 hover:text-white/60'
+                }`}
+              >
+                <span className="text-2xl">{tab.icon}</span>
+                <span className="text-[10px] font-medium mt-0.5">{tab.label}</span>
+                {currentTab === tab.id && (
+                  <span className="w-1 h-1 rounded-full bg-cyan-400 mt-0.5 animate-pulse" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    export default App;
