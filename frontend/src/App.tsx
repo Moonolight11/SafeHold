@@ -1,913 +1,953 @@
 import React, { useState, useEffect } from 'react';
 
-// ============================================================
-// ТИПЫ ДАННЫХ
-// ============================================================
+// ==========================================
+// 1. TYPES & INTERFACES
+// ==========================================
 interface Match {
-  id: number;
-  team1: string;
-  team2: string;
-  score1: number;
-  score2: number;
+  id: string;
+  category: 'dota2' | 'cs2' | 'tanks' | 'football' | 'hockey';
+  teamA: string;
+  teamB: string;
+  logoA: string;
+  logoB: string;
+  scoreA: number;
+  scoreB: number;
+  status: 'live' | 'upcoming' | 'finished';
+  oddsA: number;
+  oddsB: number;
+  oddsDraw?: number;
   time: string;
-  category: string;
-  coef1: number;
-  coef2: number;
-  isLive: boolean;
-  status: 'upcoming' | 'live' | 'finished';
+  period: string;
 }
 
 interface Bet {
-  id: number;
-  matchId: number;
-  matchName: string;
-  selectedTeam: string;
-  coefficient: number;
+  id: string;
+  matchId: string;
+  teamA: string;
+  teamB: string;
+  category: string;
+  prediction: 'teamA' | 'teamB' | 'draw';
+  predictionName: string;
+  odds: number;
   amount: number;
-  potentialWin: number;
-  status: 'active' | 'won' | 'lost';
-  date: string;
+  status: 'pending' | 'won' | 'lost';
 }
 
-interface Referral {
-  id: number;
-  username: string;
-  date: string;
-  bets: number;
-}
+// ==========================================
+// 2. INLINE SVG ICONS (Zero NPM dependency!)
+// ==========================================
+const Icons = {
+  Star: () => (
+    <svg className="w-5 h-5 text-amber-400 fill-amber-400 animate-pulse" viewBox="0 0 24 24">
+      <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+    </svg>
+  ),
+  Dashboard: ({ active }: { active: boolean }) => (
+    <svg className={`w-6 h-6 ${active ? 'text-[#00E5FF]' : 'text-slate-400'}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="7" height="9" rx="1" />
+      <rect x="14" y="3" width="7" height="5" rx="1" />
+      <rect x="14" y="12" width="7" height="9" rx="1" />
+      <rect x="3" y="16" width="7" height="5" rx="1" />
+    </svg>
+  ),
+  MyBets: ({ active }: { active: boolean }) => (
+    <svg className={`w-6 h-6 ${active ? 'text-[#00E5FF]' : 'text-slate-400'}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  ),
+  Wallet: ({ active }: { active: boolean }) => (
+    <svg className={`w-6 h-6 ${active ? 'text-[#00E5FF]' : 'text-slate-400'}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+    </svg>
+  ),
+  Dota2: () => (
+    <span className="font-extrabold tracking-tighter text-red-500 text-xs">⚔️ DOTA 2</span>
+  ),
+  CS2: () => (
+    <span className="font-extrabold tracking-tighter text-orange-500 text-xs">🎯 CS 2</span>
+  ),
+  Tanks: () => (
+    <span className="font-extrabold tracking-tighter text-green-500 text-xs">🚜 TANKS</span>
+  ),
+  Football: () => (
+    <span className="font-extrabold tracking-tighter text-blue-500 text-xs">⚽ FOOTBALL</span>
+  ),
+  Hockey: () => (
+    <span className="font-extrabold tracking-tighter text-sky-500 text-xs">🏒 HOCKEY</span>
+  ),
+};
 
-// ============================================================
-// ОСНОВНОЙ КОМПОНЕНТ
-// ============================================================
-const App: React.FC = () => {
-  // ------------------------------------------------------------
-  // СОСТОЯНИЯ
-  // ------------------------------------------------------------
-  const [currentTab, setCurrentTab] = useState<'line' | 'mybets' | 'profile' | 'rules'>('line');
-  const [tgUser, setTgUser] = useState<any>(null);
-  const [balance, setBalance] = useState(1250);
-
-  // --- Фильтр категорий ---
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const categories = [
-    { id: 'all', label: 'Все', emoji: '🌐' },
-    { id: 'dota', label: 'Dota 2', emoji: '🎮' },
-    { id: 'cs', label: 'CS 2', emoji: '🔫' },
-    { id: 'tanks', label: 'Танки', emoji: '🚜' },
-    { id: 'football', label: 'Футбол', emoji: '⚽' },
-    { id: 'hockey', label: 'Хоккей', emoji: '🏒' }
-  ];
-
-  // --- Матчи ---
-  const [matches, setMatches] = useState<Match[]>([
-    { id: 1, team1: 'Team Spirit', team2: 'Gaimin Gladiators', score1: 12, score2: 8, time: '25:00', category: 'dota', coef1: 1.85, coef2: 2.10, isLive: true, status: 'live' },
-    { id: 2, team1: 'Natus Vincere', team2: 'Vitality', score1: 7, score2: 9, time: '18:00', category: 'cs', coef1: 2.20, coef2: 1.75, isLive: true, status: 'live' },
-    { id: 3, team1: 'Wargaming', team2: 'ESL Team', score1: 3, score2: 2, time: '12:00', category: 'tanks', coef1: 1.95, coef2: 1.90, isLive: false, status: 'upcoming' },
-    { id: 4, team1: 'Real Madrid', team2: 'Barcelona', score1: 1, score2: 1, time: '65:00', category: 'football', coef1: 2.50, coef2: 2.80, isLive: true, status: 'live' },
-    { id: 5, team1: 'CSKA', team2: 'SKA', score1: 2, score2: 3, time: '45:00', category: 'hockey', coef1: 2.30, coef2: 1.70, isLive: true, status: 'live' },
-    { id: 6, team1: 'PSG.LGD', team2: 'OG', score1: 5, score2: 5, time: '32:00', category: 'dota', coef1: 1.90, coef2: 2.00, isLive: true, status: 'live' },
-    { id: 7, team1: 'FaZe Clan', team2: 'Cloud9', score1: 0, score2: 0, time: '00:00', category: 'cs', coef1: 1.65, coef2: 2.40, isLive: false, status: 'upcoming' },
-  ]);
-
-  // --- Ставки ---
-  const [bets, setBets] = useState<Bet[]>([
-    { id: 1, matchId: 1, matchName: 'Team Spirit vs Gaimin', selectedTeam: 'Team Spirit', coefficient: 1.85, amount: 100, potentialWin: 185, status: 'active', date: '12.07.2026' },
-    { id: 2, matchId: 2, matchName: 'NaVi vs Vitality', selectedTeam: 'Vitality', coefficient: 1.75, amount: 50, potentialWin: 87.5, status: 'won', date: '11.07.2026' },
-    { id: 3, matchId: 3, matchName: 'Wargaming vs ESL', selectedTeam: 'Wargaming', coefficient: 1.95, amount: 30, potentialWin: 58.5, status: 'lost', date: '10.07.2026' },
-  ]);
-
-  // --- Профиль ---
-  const [referrals, setReferrals] = useState<Referral[]>([
-    { id: 1, username: '@john_doe', date: '05.07.2026', bets: 3 },
-    { id: 2, username: '@jane_smith', date: '07.07.2026', bets: 5 },
-    { id: 3, username: '@mike_rogers', date: '09.07.2026', bets: 2 },
-  ]);
-  const [referralLink, setReferralLink] = useState('t.me/safehold_bet_bot?start=ref_12345');
-  const [copyStatus, setCopyStatus] = useState('');
-
-  // --- Купон (окно ставки) ---
-  const [showBetModal, setShowBetModal] = useState(false);
+export default function App() {
+  // ==========================================
+  // 3. REACT STATE MANAGEMENT
+  // ==========================================
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'my-bets' | 'wallet'>('dashboard');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<'team1' | 'team2' | null>(null);
-  const [betAmount, setBetAmount] = useState('');
-  const [betCoef, setBetCoef] = useState(0);
-  const [betPotential, setBetPotential] = useState(0);
+  
+  const [userBalance, setUserBalance] = useState<number>(250);
+  
+  const [betSlip, setBetSlip] = useState<{
+    match: Match;
+    prediction: 'teamA' | 'teamB' | 'draw';
+    odds: number;
+  } | null>(null);
+  const [betAmount, setBetAmount] = useState<string>('10');
 
-  // --- Фильтр моих ставок ---
-  const [betFilter, setBetFilter] = useState<'active' | 'history'>('active');
+  const [showWalletModal, setShowWalletModal] = useState<boolean>(false);
+  const [walletModalAction, setWalletModalAction] = useState<'deposit' | 'withdraw'>('deposit');
+  const [starsAmountInput, setStarsAmountInput] = useState<string>('50');
 
-  // ------------------------------------------------------------
-  // ЭФФЕКТЫ
-  // ------------------------------------------------------------
-  useEffect(() => {
-    const tg = (window as any).Telegram?.WebApp;
-    if (tg) {
-      tg.expand();
-      tg.ready();
-      setTgUser(tg.initDataUnsafe?.user || null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const [matches, setMatches] = useState<Match[]>([
+    {
+      id: 'm1',
+      category: 'dota2',
+      teamA: 'Team Spirit',
+      teamB: 'Gaimin Gladiators',
+      logoA: '🐉',
+      logoB: '🛡️',
+      scoreA: 12,
+      scoreB: 9,
+      status: 'live',
+      oddsA: 1.65,
+      oddsB: 2.20,
+      time: '34:12',
+      period: 'Map 1'
+    },
+    {
+      id: 'm2',
+      category: 'cs2',
+      teamA: 'Natus Vincere',
+      teamB: 'FaZe Clan',
+      logoA: '👑',
+      logoB: '❌',
+      scoreA: 11,
+      scoreB: 12,
+      status: 'live',
+      oddsA: 2.10,
+      oddsB: 1.75,
+      time: 'Round 24',
+      period: 'Map 2'
+    },
+    {
+      id: 'm3',
+      category: 'tanks',
+      teamA: 'Tornado Energy',
+      teamB: 'Rush Club',
+      logoA: '⚡',
+      logoB: '🐻',
+      scoreA: 4,
+      scoreB: 2,
+      status: 'live',
+      oddsA: 1.35,
+      oddsB: 3.10,
+      time: '04:15',
+      period: 'Match 1'
+    },
+    {
+      id: 'm4',
+      category: 'football',
+      teamA: 'Real Madrid',
+      teamB: 'Manchester City',
+      logoA: '⚪',
+      logoB: '🔵',
+      scoreA: 2,
+      scoreB: 2,
+      status: 'live',
+      oddsA: 2.85,
+      oddsB: 2.90,
+      oddsDraw: 3.20,
+      time: '74:45',
+      period: '2nd Half'
+    },
+    {
+      id: 'm5',
+      category: 'hockey',
+      teamA: 'Boston Bruins',
+      teamB: 'Toronto Maple Leafs',
+      logoA: '🐻',
+      logoB: '🍁',
+      scoreA: 0,
+      scoreB: 0,
+      status: 'upcoming',
+      oddsA: 1.85,
+      oddsB: 2.05,
+      oddsDraw: 3.90,
+      time: '21:45',
+      period: 'Today'
+    },
+    {
+      id: 'm6',
+      category: 'dota2',
+      teamA: 'Virtus.pro',
+      teamB: 'LGD Gaming',
+      logoA: '🐻',
+      logoB: '🏮',
+      scoreA: 0,
+      scoreB: 0,
+      status: 'upcoming',
+      oddsA: 2.45,
+      oddsB: 1.55,
+      time: 'Tomorrow',
+      period: 'Bo3'
+    },
+    {
+      id: 'm7',
+      category: 'cs2',
+      teamA: 'Vitality',
+      teamB: 'G2 Esports',
+      logoA: '🐝',
+      logoB: '⚔️',
+      scoreA: 0,
+      scoreB: 0,
+      status: 'upcoming',
+      oddsA: 1.90,
+      oddsB: 1.90,
+      time: '23:00',
+      period: 'Map 1'
     }
-  }, []);
+  ]);
 
-  // Симуляция LIVE-обновлений
+  const [myBets, setMyBets] = useState<Bet[]>([
+    {
+      id: 'b1',
+      matchId: 'm4',
+      teamA: 'Real Madrid',
+      teamB: 'Manchester City',
+      category: 'football',
+      prediction: 'teamA',
+      predictionName: 'Real Madrid',
+      odds: 2.85,
+      amount: 25,
+      status: 'pending'
+    }
+  ]);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // ==========================================
+  // 4. REAL-TIME SPORTS SIMULATOR ENGINE
+  // ==========================================
   useEffect(() => {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.ready();
+      window.Telegram.WebApp.expand();
+      window.Telegram.WebApp.setHeaderColor('#0F0F12');
+    }
+
     const interval = setInterval(() => {
-      setMatches(prevMatches =>
-        prevMatches.map(match => {
-          if (match.status === 'live') {
-            const newScore1 = match.score1 + (Math.random() > 0.7 ? 1 : 0);
-            const newScore2 = match.score2 + (Math.random() > 0.7 ? 1 : 0);
-            const newCoef1 = match.coef1 + (Math.random() - 0.5) * 0.2;
-            const newCoef2 = match.coef2 + (Math.random() - 0.5) * 0.2;
-            return {
-              ...match,
-              score1: newScore1,
-              score2: newScore2,
-              coef1: Math.max(1.1, Math.round(newCoef1 * 100) / 100),
-              coef2: Math.max(1.1, Math.round(newCoef2 * 100) / 100),
-              time: `${Math.floor(Math.random() * 30 + 15)}:${Math.floor(Math.random() * 60).toString().padStart(2, '0')}`
-            };
+      setMatches(prevMatches => {
+        return prevMatches.map(match => {
+          if (match.status !== 'live') return match;
+
+          const chance = Math.random();
+          let newScoreA = match.scoreA;
+          let newScoreB = match.scoreB;
+          let newTime = match.time;
+
+          if (match.category === 'football') {
+            const [min, sec] = match.time.split(':').map(Number);
+            let totalSec = min * 60 + sec + 5;
+            if (totalSec >= 5400) totalSec = 5400;
+            const nextMin = Math.floor(totalSec / 60);
+            const nextSec = totalSec % 60;
+            newTime = `${nextMin.toString().padStart(2, '0')}:${nextSec.toString().padStart(2, '0')}`;
+            if (chance > 0.985) newScoreA += 1;
+            else if (chance > 0.97) newScoreB += 1;
+          } else if (match.category === 'dota2') {
+            const [min, sec] = match.time.split(':').map(Number);
+            let totalSec = min * 60 + sec + 10;
+            const nextMin = Math.floor(totalSec / 60);
+            const nextSec = totalSec % 60;
+            newTime = `${nextMin.toString().padStart(2, '0')}:${nextSec.toString().padStart(2, '0')}`;
+            if (chance > 0.85) newScoreA += 1;
+            if (chance > 0.82 && chance <= 0.85) newScoreB += 1;
+          } else if (match.category === 'cs2') {
+            if (chance > 0.90) {
+              const currentRounds = newScoreA + newScoreB;
+              if (currentRounds < 24) {
+                if (Math.random() > 0.5) newScoreA += 1;
+                else newScoreB += 1;
+                newTime = `Round ${newScoreA + newScoreB + 1}`;
+              } else {
+                return { ...match, status: 'finished' };
+              }
+            }
+          } else if (match.category === 'tanks') {
+            if (chance > 0.95) {
+              if (newScoreA + newScoreB < 7) {
+                Math.random() > 0.65 ? newScoreA += 1 : newScoreB += 1;
+              }
+            }
           }
-          return match;
-        })
-      );
-    }, 8000);
+
+          let baseOddsA = 1.9;
+          let baseOddsB = 1.9;
+          const scoreDiff = newScoreA - newScoreB;
+
+          if (match.category === 'dota2' || match.category === 'cs2') {
+            baseOddsA = Math.max(1.05, 1.9 - (scoreDiff * 0.08));
+            baseOddsB = Math.max(1.05, 1.9 + (scoreDiff * 0.08));
+          } else {
+            baseOddsA = Math.max(1.02, 2.0 - (scoreDiff * 0.4));
+            baseOddsB = Math.max(1.02, 2.0 + (scoreDiff * 0.4));
+          }
+
+          const finalOddsA = parseFloat(baseOddsA.toFixed(2));
+          const finalOddsB = parseFloat(baseOddsB.toFixed(2));
+
+          return {
+            ...match,
+            scoreA: newScoreA,
+            scoreB: newScoreB,
+            oddsA: finalOddsA,
+            oddsB: finalOddsB,
+            time: newTime
+          };
+        });
+      });
+    }, 4000);
 
     return () => clearInterval(interval);
   }, []);
 
-  // Расчет потенциального выигрыша
   useEffect(() => {
-    const amount = parseFloat(betAmount);
-    if (!isNaN(amount) && amount > 0 && betCoef > 0) {
-      setBetPotential(amount * betCoef);
-    } else {
-      setBetPotential(0);
+    if (selectedMatch) {
+      const current = matches.find(m => m.id === selectedMatch.id);
+      if (current) setSelectedMatch(current);
     }
-  }, [betAmount, betCoef]);
+  }, [matches, selectedMatch]);
 
-  // ------------------------------------------------------------
-  // ЛОГИКА СТАВОК
-  // ------------------------------------------------------------
-  const handleOpenBetModal = (match: Match, team: 'team1' | 'team2') => {
-    setSelectedMatch(match);
-    setSelectedTeam(team);
-    setBetCoef(team === 'team1' ? match.coef1 : match.coef2);
-    setBetAmount('');
-    setBetPotential(0);
-    setShowBetModal(true);
+  // ==========================================
+  // 5. HANDLERS
+  // ==========================================
+  const triggerHaptic = () => {
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+    }
+  };
+
+  const handleOpenBetSlip = (match: Match, prediction: 'teamA' | 'teamB' | 'draw', odds: number) => {
+    triggerHaptic();
+    setBetSlip({ match, prediction, odds });
   };
 
   const handlePlaceBet = () => {
-    if (!selectedMatch || !selectedTeam || !betAmount) return;
+    triggerHaptic();
+    if (!betSlip) return;
 
-    const amount = parseFloat(betAmount);
+    const amount = parseInt(betAmount);
     if (isNaN(amount) || amount <= 0) {
-      alert('Введите корректную сумму');
+      showToast('Введите корректную сумму', 'error');
       return;
     }
 
-    if (amount > balance) {
-      alert('Недостаточно Звёзд');
+    if (amount > userBalance) {
+      showToast('Недостаточно звезд на балансе', 'error');
       return;
     }
 
-    const teamName = selectedTeam === 'team1' ? selectedMatch.team1 : selectedMatch.team2;
+    setUserBalance(prev => prev - amount);
+
     const newBet: Bet = {
-      id: Date.now(),
-      matchId: selectedMatch.id,
-      matchName: `${selectedMatch.team1} vs ${selectedMatch.team2}`,
-      selectedTeam: teamName,
-      coefficient: betCoef,
+      id: 'bet_' + Date.now(),
+      matchId: betSlip.match.id,
+      teamA: betSlip.match.teamA,
+      teamB: betSlip.match.teamB,
+      category: betSlip.match.category,
+      prediction: betSlip.prediction,
+      predictionName: betSlip.prediction === 'teamA' ? betSlip.match.teamA : betSlip.prediction === 'teamB' ? betSlip.match.teamB : 'Ничья',
+      odds: betSlip.odds,
       amount: amount,
-      potentialWin: betPotential,
-      status: 'active',
-      date: new Date().toLocaleDateString('ru-RU')
+      status: 'pending'
     };
 
-    setBets([newBet, ...bets]);
-    setBalance(balance - amount);
-    setShowBetModal(false);
-    setSelectedMatch(null);
-    setSelectedTeam(null);
-    setBetAmount('');
-    setBetCoef(0);
-    setBetPotential(0);
+    setMyBets(prev => [newBet, ...prev]);
+    showToast(`Ставка в ★ ${amount} успешно принята!`, 'success');
+    setBetSlip(null);
   };
 
-  // ------------------------------------------------------------
-  // ЛОГИКА РЕФЕРАЛКИ
-  // ------------------------------------------------------------
-  const handleCopyReferralLink = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(referralLink).then(() => {
-        setCopyStatus('Ссылка скопирована!');
-        setTimeout(() => setCopyStatus(''), 3000);
-      }).catch(() => {
-        const textArea = document.createElement('textarea');
-        textArea.value = referralLink;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        setCopyStatus('Ссылка скопирована!');
-        setTimeout(() => setCopyStatus(''), 3000);
-      });
+  const handleWalletAction = () => {
+    triggerHaptic();
+    const amount = parseInt(starsAmountInput);
+    if (isNaN(amount) || amount <= 0) {
+      showToast('Введите верную сумму', 'error');
+      return;
+    }
+
+    if (walletModalAction === 'deposit') {
+      setUserBalance(prev => prev + amount);
+      showToast(`Начислено ★ ${amount}`, 'success');
     } else {
-      const textArea = document.createElement('textarea');
-      textArea.value = referralLink;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      setCopyStatus('Ссылка скопирована!');
-      setTimeout(() => setCopyStatus(''), 3000);
+      if (amount > userBalance) {
+        showToast('Недостаточный баланс для вывода', 'error');
+        return;
+      }
+      setUserBalance(prev => prev - amount);
+      showToast(`Заявка на вывод ★ ${amount} отправлена!`, 'success');
     }
+    setShowWalletModal(false);
   };
 
-  // ------------------------------------------------------------
-  // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-  // ------------------------------------------------------------
-  const getFilteredMatches = () => {
-    if (selectedCategory === 'all') return matches;
-    return matches.filter(m => m.category === selectedCategory);
-  };
+  const filteredMatches = selectedCategory === 'all' 
+    ? matches 
+    : matches.filter(m => m.category === selectedCategory);
 
-  const getMatchEmoji = (category: string) => {
-    switch (category) {
-      case 'dota': return '🎮';
-      case 'cs': return '🔫';
-      case 'tanks': return '🚜';
-      case 'football': return '⚽';
-      case 'hockey': return '🏒';
-      default: return '🎯';
-    }
-  };
+  const activeLiveMatches = filteredMatches.filter(m => m.status === 'live');
+  const activeUpcomingMatches = filteredMatches.filter(m => m.status === 'upcoming');
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'live': return '#10b981';
-      case 'upcoming': return '#f59e0b';
-      case 'finished': return '#6b7280';
-      default: return '#6b7280';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'live': return '● LIVE';
-      case 'upcoming': return 'Скоро';
-      case 'finished': return 'Завершен';
-      default: return status;
-    }
-  };
-
-  const getBetStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return '#00f3ff';
-      case 'won': return '#10b981';
-      case 'lost': return '#ef4444';
-      default: return '#6b7280';
-    }
-  };
-
-  const getBetStatusLabel = (status: string) => {
-    switch (status) {
-      case 'active': return 'Активна';
-      case 'won': return 'Выиграла';
-      case 'lost': return 'Проиграла';
-      default: return status;
-    }
-  };
-
-  // ------------------------------------------------------------
-  // РЕНДЕР ВКЛАДОК
-  // ------------------------------------------------------------
-  const renderLineTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#00f3ff', letterSpacing: '-0.5px' }}>
-        🔥 Линия / Live
-      </div>
-
-      {/* Фильтр категорий */}
-      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px', flexWrap: 'nowrap' }}>
-        {categories.map(cat => (
-          <button
-            key={cat.id}
-            onClick={() => setSelectedCategory(cat.id)}
-            style={{
-              flexShrink: 0,
-              padding: '8px 16px',
-              borderRadius: '20px',
-              border: selectedCategory === cat.id ? '1px solid #00f3ff' : '1px solid #231c3c',
-              background: selectedCategory === cat.id ? '#00f3ff20' : '#141023',
-              color: selectedCategory === cat.id ? '#00f3ff' : '#6b7280',
-              fontWeight: selectedCategory === cat.id ? 'bold' : 'normal',
-              fontSize: '13px',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
-            onMouseEnter={(e) => { if (selectedCategory !== cat.id) e.currentTarget.style.border = '1px solid #00f3ff40'; }}
-            onMouseLeave={(e) => { if (selectedCategory !== cat.id) e.currentTarget.style.border = '1px solid #231c3c'; }}
-          >
-            {cat.emoji} {cat.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Список матчей */}
-      {getFilteredMatches().length === 0 ? (
-        <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-          Нет матчей в этой категории
+  // ==========================================
+  // 6. RENDER
+  // ==========================================
+  return (
+    <div className="bg-[#0F0F12] text-[#E2E8F0] min-h-screen flex flex-col font-sans select-none overflow-hidden max-h-screen">
+      
+      <header className="h-16 border-b border-[#2A2B36] px-4 flex items-center justify-between bg-[#15161E] shrink-0">
+        <div className="flex items-center space-x-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#00E5FF] to-[#00FF87] flex items-center justify-center font-black text-black text-sm shadow-[0_0_12px_rgba(0,229,255,0.4)]">
+            SB
+          </div>
+          <span className="text-lg font-black tracking-wider bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">STARBET</span>
         </div>
-      ) : (
-        getFilteredMatches().map(match => (
-          <div key={match.id} style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '20px' }}>{getMatchEmoji(match.category)}</span>
-                <span style={{ fontSize: '12px', color: getStatusColor(match.status) }}>
-                  {getStatusLabel(match.status)}
-                </span>
-                {match.isLive && (
-                  <span style={{
-                    display: 'inline-block',
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: '#10b981',
-                    animation: 'pulseGlow 1s infinite'
-                  }} />
-                )}
+        
+        <div 
+          onClick={() => { triggerHaptic(); setActiveTab('wallet'); }} 
+          className="flex items-center space-x-2 bg-slate-900/80 border border-amber-500/30 px-3 py-1.5 rounded-full cursor-pointer hover:border-amber-400 transition-all duration-300 shadow-[0_0_10px_rgba(245,158,11,0.1)]"
+        >
+          <Icons.Star />
+          <span className="text-amber-400 font-extrabold text-sm tracking-wide">★ {userBalance}</span>
+        </div>
+      </header>
+
+      <main className="flex-1 overflow-y-auto pb-24 h-[calc(100vh-128px)]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        
+        {activeTab === 'dashboard' && !selectedMatch && (
+          <div className="p-4 space-y-6">
+            
+            <div className="bg-gradient-to-r from-slate-900 via-[#1C1E2A] to-slate-900 border border-[#00E5FF]/20 rounded-2xl p-4 flex justify-between items-center relative overflow-hidden shadow-[0_0_15px_rgba(0,229,255,0.1)]">
+              <div className="space-y-1 relative z-10">
+                <span className="text-[10px] text-[#00E5FF] tracking-widest uppercase font-bold">Акция недели</span>
+                <h3 className="text-md font-extrabold text-white">Страховка первой ставки</h3>
+                <p className="text-xs text-slate-400">Поставьте до 100 звезд без риска потерь!</p>
               </div>
-              <span style={{ fontSize: '12px', color: '#6b7280' }}>{match.time}</span>
+              <div className="text-4xl filter drop-shadow-[0_0_10px_rgba(0,229,255,0.5)]">🛡️</div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div style={{ fontWeight: 'bold', color: '#ffffff', fontSize: '16px' }}>{match.team1}</div>
-              <div style={{ fontWeight: 'bold', color: '#00f3ff', fontSize: '20px' }}>{match.score1} : {match.score2}</div>
-              <div style={{ fontWeight: 'bold', color: '#ffffff', fontSize: '16px' }}>{match.team2}</div>
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">Категории</span>
+              <div className="flex space-x-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {[
+                  { id: 'all', label: '🔥 Все' },
+                  { id: 'dota2', label: '⚔️ Dota 2' },
+                  { id: 'cs2', label: '🎯 CS 2' },
+                  { id: 'tanks', label: '🚜 Танки' },
+                  { id: 'football', label: '⚽ Футбол' },
+                  { id: 'hockey', label: '🏒 Хоккей' },
+                ].map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => { triggerHaptic(); setSelectedCategory(cat.id); }}
+                    className={`px-4 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap border transition-all duration-300 ${
+                      selectedCategory === cat.id 
+                        ? 'bg-gradient-to-r from-[#00E5FF] to-[#0087FF] text-black border-transparent shadow-[0_0_12px_rgba(0,229,255,0.3)]' 
+                        : 'bg-[#15161E] text-slate-400 border-[#2A2B36]'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => handleOpenBetModal(match, 'team1')}
-                style={{
-                  flex: 1,
-                  background: '#bf77ff20',
-                  border: '1px solid #bf77ff40',
-                  borderRadius: '12px',
-                  padding: '12px',
-                  color: '#bf77ff',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  textAlign: 'center'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#bf77ff30'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#bf77ff20'}
-              >
-                П1 КФ {match.coef1.toFixed(2)}
-              </button>
-              <button
-                onClick={() => handleOpenBetModal(match, 'team2')}
-                style={{
-                  flex: 1,
-                  background: '#bf77ff20',
-                  border: '1px solid #bf77ff40',
-                  borderRadius: '12px',
-                  padding: '12px',
-                  color: '#bf77ff',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  textAlign: 'center'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#bf77ff30'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#bf77ff20'}
-              >
-                П2 КФ {match.coef2.toFixed(2)}
-              </button>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-ping" />
+                <span className="text-xs font-bold text-red-500 tracking-wider uppercase">В эфире LIVE ({activeLiveMatches.length})</span>
+              </div>
+
+              {activeLiveMatches.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-xs">Нет активных Live матчей в данной категории</div>
+              ) : (
+                <div className="space-y-4">
+                  {activeLiveMatches.map(match => (
+                    <div 
+                      key={match.id}
+                      className="bg-[#15161E]/90 border border-[#2A2B36] rounded-2xl p-4 space-y-4 shadow-lg relative overflow-hidden"
+                    >
+                      <div className="flex justify-between items-center text-xs text-slate-400">
+                        <div className="flex items-center space-x-1">
+                          {match.category === 'dota2' && <Icons.Dota2 />}
+                          {match.category === 'cs2' && <Icons.CS2 />}
+                          {match.category === 'tanks' && <Icons.Tanks />}
+                          {match.category === 'football' && <Icons.Football />}
+                          {match.category === 'hockey' && <Icons.Hockey />}
+                        </div>
+                        <span className="text-red-500 font-extrabold tracking-widest">{match.period} | {match.time}</span>
+                      </div>
+
+                      <div 
+                        onClick={() => { triggerHaptic(); setSelectedMatch(match); }}
+                        className="grid grid-cols-7 items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <div className="col-span-3 flex flex-col items-center space-y-2 text-center">
+                          <span className="text-3xl filter drop-shadow-[0_2px_8px_rgba(255,255,255,0.15)]">{match.logoA}</span>
+                          <span className="text-xs font-bold text-white truncate max-w-[100px]">{match.teamA}</span>
+                        </div>
+                        
+                        <div className="col-span-1 flex flex-col items-center justify-center">
+                          <div className="bg-[#212330] px-2 py-1 rounded-lg text-sm font-black text-[#00FF87] border border-[#00FF87]/15">
+                            {match.scoreA}:{match.scoreB}
+                          </div>
+                        </div>
+
+                        <div className="col-span-3 flex flex-col items-center space-y-2 text-center">
+                          <span className="text-3xl filter drop-shadow-[0_2px_8px_rgba(255,255,255,0.15)]">{match.logoB}</span>
+                          <span className="text-xs font-bold text-white truncate max-w-[100px]">{match.teamB}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 pt-2">
+                        <button 
+                          onClick={() => handleOpenBetSlip(match, 'teamA', match.oddsA)}
+                          className="bg-[#1C1D2A] hover:bg-[#25273B] border border-[#2A2B36] rounded-xl py-2 flex flex-col items-center justify-center transition-all duration-200"
+                        >
+                          <span className="text-[10px] text-slate-500">Победа 1</span>
+                          <span className="text-xs font-black text-[#00E5FF]">{match.oddsA}</span>
+                        </button>
+
+                        {match.oddsDraw ? (
+                          <button 
+                            onClick={() => handleOpenBetSlip(match, 'draw', match.oddsDraw || 3.0)}
+                            className="bg-[#1C1D2A] hover:bg-[#25273B] border border-[#2A2B36] rounded-xl py-2 flex flex-col items-center justify-center transition-all duration-200"
+                          >
+                            <span className="text-[10px] text-slate-500">Ничья</span>
+                            <span className="text-xs font-black text-[#FFB300]">{match.oddsDraw}</span>
+                          </button>
+                        ) : (
+                          <div className="bg-[#1C1D2A]/30 rounded-xl flex items-center justify-center text-slate-600 text-[10px] font-bold">
+                            Нет ничьей
+                          </div>
+                        )}
+
+                        <button 
+                          onClick={() => handleOpenBetSlip(match, 'teamB', match.oddsB)}
+                          className="bg-[#1C1D2A] hover:bg-[#25273B] border border-[#2A2B36] rounded-xl py-2 flex flex-col items-center justify-center transition-all duration-200"
+                        >
+                          <span className="text-[10px] text-slate-500">Победа 2</span>
+                          <span className="text-xs font-black text-[#00E5FF]">{match.oddsB}</span>
+                        </button>
+                      </div>
+
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">Ближайшие матчи ({activeUpcomingMatches.length})</span>
+
+              <div className="space-y-3">
+                {activeUpcomingMatches.map(match => (
+                  <div 
+                    key={match.id}
+                    onClick={() => { triggerHaptic(); setSelectedMatch(match); }}
+                    className="bg-[#15161E]/60 border border-[#2A2B36] rounded-xl p-3 flex justify-between items-center cursor-pointer hover:bg-[#15161E] transition-all duration-300"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="flex flex-col items-center">
+                        <span className="text-xl">{match.logoA}</span>
+                        <span className="text-[10px] text-slate-500 mt-1">vs</span>
+                        <span className="text-xl">{match.logoB}</span>
+                      </div>
+                      <div>
+                        <div className="text-xs font-extrabold text-white">{match.teamA} - {match.teamB}</div>
+                        <div className="text-[10px] text-[#00E5FF] mt-1">{match.time} | {match.period}</div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                      <div className="bg-[#1F2130] px-3 py-1.5 rounded-lg border border-[#2A2B36] text-center">
+                        <div className="text-[8px] text-slate-500">П1</div>
+                        <div className="text-xs font-bold text-white">{match.oddsA}</div>
+                      </div>
+                      <div className="bg-[#1F2130] px-3 py-1.5 rounded-lg border border-[#2A2B36] text-center">
+                        <div className="text-[8px] text-slate-500">П2</div>
+                        <div className="text-xs font-bold text-white">{match.oddsB}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {selectedMatch && (
+          <div className="p-4 space-y-6">
+            <button 
+              onClick={() => { triggerHaptic(); setSelectedMatch(null); }}
+              className="flex items-center space-x-1.5 text-xs text-[#00E5FF] font-bold bg-[#1C1D2A] px-3 py-1.5 rounded-lg border border-[#2A2B36]"
+            >
+              ← Назад в ленту
+            </button>
+
+            <div className="bg-gradient-to-b from-[#1C1E2B] to-[#12131C] border border-[#2A2B36] rounded-2xl p-6 text-center space-y-4">
+              <span className="text-xs px-2 py-1 rounded bg-red-500/10 text-red-500 border border-red-500/20 font-bold uppercase tracking-widest">{selectedMatch.status === 'live' ? 'LIVE ЭФИР' : 'СКОРО'}</span>
+              
+              <div className="flex items-center justify-around">
+                <div className="flex flex-col items-center space-y-2">
+                  <span className="text-5xl filter drop-shadow-[0_4px_12px_rgba(255,255,255,0.2)]">{selectedMatch.logoA}</span>
+                  <span className="text-sm font-black text-white">{selectedMatch.teamA}</span>
+                </div>
+                <div className="text-center">
+                  <span className="text-3xl font-black text-white bg-[#15161E] px-4 py-2 rounded-xl border border-[#2A2B36]">
+                    {selectedMatch.scoreA} : {selectedMatch.scoreB}
+                  </span>
+                  <div className="text-[10px] text-slate-400 mt-3">{selectedMatch.period} | {selectedMatch.time}</div>
+                </div>
+                <div className="flex flex-col items-center space-y-2">
+                  <span className="text-5xl filter drop-shadow-[0_4px_12px_rgba(255,255,255,0.2)]">{selectedMatch.logoB}</span>
+                  <span className="text-sm font-black text-white">{selectedMatch.teamB}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">Основные исходы</span>
+              
+              <div className="bg-[#15161E] border border-[#2A2B36] rounded-2xl p-4 space-y-3">
+                <div className="flex justify-between items-center text-xs text-slate-400 pb-2 border-b border-[#2A2B36]">
+                  <span>Исход матча (П1 - Ничья - П2)</span>
+                  <span className="text-[#00E5FF] font-bold">1X2</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div 
+                    onClick={() => handleOpenBetSlip(selectedMatch, 'teamA', selectedMatch.oddsA)}
+                    className="bg-[#1F2130] p-3 rounded-xl border border-[#2A2B36] hover:border-[#00E5FF] transition-all cursor-pointer flex flex-col items-center justify-center"
+                  >
+                    <span className="text-[10px] text-slate-500">Победа 1</span>
+                    <span className="text-lg font-black text-white mt-1">{selectedMatch.oddsA}</span>
+                  </div>
+
+                  <div 
+                    onClick={() => {
+                      if (selectedMatch.oddsDraw) {
+                        handleOpenBetSlip(selectedMatch, 'draw', selectedMatch.oddsDraw);
+                      } else {
+                        showToast('Ничья недоступна', 'error');
+                      }
+                    }}
+                    className={`p-3 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer ${
+                      selectedMatch.oddsDraw 
+                        ? 'bg-[#1F2130] border-[#2A2B36] hover:border-[#FFB300]' 
+                        : 'bg-[#1F2130]/20 border-transparent opacity-45'
+                    }`}
+                  >
+                    <span className="text-[10px] text-slate-500">Ничья</span>
+                    <span className="text-lg font-black text-white mt-1">{selectedMatch.oddsDraw || '-'}</span>
+                  </div>
+
+                  <div 
+                    onClick={() => handleOpenBetSlip(selectedMatch, 'teamB', selectedMatch.oddsB)}
+                    className="bg-[#1F2130] p-3 rounded-xl border border-[#2A2B36] hover:border-[#00E5FF] transition-all cursor-pointer flex flex-col items-center justify-center"
+                  >
+                    <span className="text-[10px] text-slate-500">Победа 2</span>
+                    <span className="text-lg font-black text-white mt-1">{selectedMatch.oddsB}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#15161E] border border-[#2A2B36] rounded-2xl p-4 space-y-3">
+                <div className="flex justify-between items-center text-xs text-slate-400 pb-2 border-b border-[#2A2B36]">
+                  <span>Двойной шанс</span>
+                  <span className="text-[#00FF87] font-bold">DC</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-[#1F2130] p-3 rounded-xl border border-[#2A2B36] flex justify-between items-center">
+                    <span className="text-xs text-slate-400 font-bold">1X (Поб. 1 или Ничья)</span>
+                    <span className="text-sm font-black text-white">{(selectedMatch.oddsA * 0.75).toFixed(2)}</span>
+                  </div>
+                  <div className="bg-[#1F2130] p-3 rounded-xl border border-[#2A2B36] flex justify-between items-center">
+                    <span className="text-xs text-slate-400 font-bold">2X (Поб. 2 или Ничья)</span>
+                    <span className="text-sm font-black text-white">{(selectedMatch.oddsB * 0.75).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
-        ))
-      )}
+        )}
 
-      {/* Модалка ставки */}
-      {showBetModal && selectedMatch && selectedTeam && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.8)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'center',
-          zIndex: 50,
-          padding: '16px'
-        }}>
-          <div style={{
-            background: '#141023',
-            border: '1px solid #231c3c',
-            borderRadius: '24px',
-            width: '100%',
-            maxWidth: '400px',
-            padding: '24px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            animation: 'slideUp 0.3s ease-out'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ffffff' }}>
-                {selectedMatch.team1} vs {selectedMatch.team2}
+        {activeTab === 'my-bets' && (
+          <div className="p-4 space-y-4">
+            <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">История ваших ставок</span>
+
+            {myBets.length === 0 ? (
+              <div className="text-center py-20 text-slate-500">
+                <span className="text-3xl block mb-2">📦</span>
+                У вас пока нет оформленных ставок
               </div>
-              <button onClick={() => setShowBetModal(false)} style={{ color: '#6b7280', fontSize: '24px', background: 'none', border: 'none', cursor: 'pointer' }}>
-                ✕
-              </button>
-            </div>
-            <div style={{ color: '#6b7280', fontSize: '14px' }}>
-              Ставка на: <span style={{ color: '#bf77ff', fontWeight: 'bold' }}>
-                {selectedTeam === 'team1' ? selectedMatch.team1 : selectedMatch.team2}
-              </span>
-            </div>
-            <div style={{ color: '#6b7280', fontSize: '14px' }}>
-              Коэффициент: <span style={{ color: '#00f3ff', fontWeight: 'bold' }}>{betCoef.toFixed(2)}</span>
-            </div>
-            <div>
-              <label style={{ color: '#6b7280', fontSize: '14px', display: 'block', marginBottom: '4px' }}>
-                Сумма ставки (⭐️ Звёзды)
-              </label>
-              <input
-                type="number"
-                value={betAmount}
-                onChange={(e) => setBetAmount(e.target.value)}
-                style={{
-                  width: '100%',
-                  background: '#1a142f',
-                  border: '1px solid #231c3c',
-                  borderRadius: '12px',
-                  padding: '12px',
-                  color: '#ffffff',
-                  fontSize: '16px',
-                  outline: 'none',
-                  transition: 'border 0.2s'
-                }}
-                placeholder="Введите количество Звёзд"
-                onFocus={(e) => e.currentTarget.style.border = '1px solid #00f3ff'}
-                onBlur={(e) => e.currentTarget.style.border = '1px solid #231c3c'}
-                min="1"
-              />
-            </div>
-            {betPotential > 0 && (
-              <div style={{ background: '#10b98120', border: '1px solid #10b98140', borderRadius: '12px', padding: '12px', textAlign: 'center' }}>
-                <span style={{ color: '#6b7280', fontSize: '14px' }}>Ваш возможный выигрыш:</span>
-                <span style={{ color: '#eab308', fontWeight: 'bold', fontSize: '18px', marginLeft: '8px' }}>⭐️ {betPotential.toFixed(0)}</span>
+            ) : (
+              <div className="space-y-4">
+                {myBets.map(bet => (
+                  <div key={bet.id} className="bg-[#15161E] border border-[#2A2B36] rounded-2xl p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{bet.category}</span>
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wide ${
+                        bet.status === 'pending' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'
+                      }`}>
+                        {bet.status === 'pending' ? 'В ожидании' : 'Выиграна'}
+                      </span>
+                    </div>
+
+                    <div className="text-sm font-black text-white">{bet.teamA} vs {bet.teamB}</div>
+                    
+                    <div className="grid grid-cols-2 gap-2 bg-[#1C1D2A] p-2.5 rounded-xl border border-[#2A2B36]">
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Прогноз:</span>
+                        <span className="text-xs font-bold text-white truncate max-w-[120px] block">{bet.predictionName}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Коэффициент:</span>
+                        <span className="text-xs font-black text-[#00E5FF] block">{bet.odds}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2 text-xs">
+                      <div>
+                        <span className="text-slate-400">Ставка:</span>
+                        <span className="text-white font-bold ml-1">★ {bet.amount}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Возможный выигрыш:</span>
+                        <span className="text-[#00FF87] font-black ml-1">★ {Math.floor(bet.amount * bet.odds)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-            <button
+          </div>
+        )}
+
+        {activeTab === 'wallet' && (
+          <div className="p-4 space-y-6">
+            <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">Ваш кошелек</span>
+
+            <div className="bg-gradient-to-br from-[#1C1E2C] to-[#12131C] border border-amber-500/30 rounded-3xl p-6 text-center space-y-3 shadow-[0_0_20px_rgba(245,158,11,0.07)]">
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Текущий баланс</span>
+              <div className="flex items-center justify-center space-x-2">
+                <span className="text-5xl filter drop-shadow-[0_2px_8px_rgba(245,158,11,0.3)]">★</span>
+                <span className="text-4xl font-black text-amber-400 tracking-wide">{userBalance}</span>
+              </div>
+              <p className="text-xs text-slate-500">1 Звезда (★) Telegram = 1 Звезда внутри приложения</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <button 
+                onClick={() => {
+                  triggerHaptic();
+                  setWalletModalAction('deposit');
+                  setShowWalletModal(true);
+                }}
+                className="bg-gradient-to-r from-amber-500 to-yellow-600 text-black rounded-2xl py-3.5 font-black text-sm tracking-wide shadow-lg hover:shadow-amber-500/10 active:scale-95 transition-all duration-150"
+              >
+                Купить ★ Stars
+              </button>
+              <button 
+                onClick={() => {
+                  triggerHaptic();
+                  setWalletModalAction('withdraw');
+                  setShowWalletModal(true);
+                }}
+                className="bg-[#1C1E2B] border border-[#2A2B36] text-white rounded-2xl py-3.5 font-bold text-sm tracking-wide hover:bg-[#252839] active:scale-95 transition-all duration-150"
+              >
+                Вывод Звезд
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">История платежей</span>
+              <div className="bg-[#15161E] border border-[#2A2B36] rounded-2xl p-4 divide-y divide-[#2A2B36]">
+                <div className="py-2.5 flex justify-between items-center text-xs">
+                  <div>
+                    <span className="text-white font-bold block">Пополнение через Bot API</span>
+                    <span className="text-[10px] text-slate-500">22.07.2026 14:15</span>
+                  </div>
+                  <span className="text-green-400 font-bold">+ ★ 250</span>
+                </div>
+                <div className="py-2.5 flex justify-between items-center text-xs">
+                  <div>
+                    <span className="text-white font-bold block">Авторизация профиля</span>
+                    <span className="text-[10px] text-slate-500">22.07.2026 14:12</span>
+                  </div>
+                  <span className="text-green-400 font-bold">+ ★ 10</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </main>
+
+      {toast && (
+        <div className={`fixed bottom-20 left-4 right-4 z-50 p-4 rounded-xl border shadow-xl flex items-center space-x-2 animate-bounce ${
+          toast.type === 'success' 
+            ? 'bg-green-500/10 border-green-500/20 text-green-400' 
+            : 'bg-red-500/10 border-red-500/20 text-red-400'
+        }`}>
+          <span>{toast.type === 'success' ? '✅' : '❌'}</span>
+          <span className="text-xs font-bold">{toast.message}</span>
+        </div>
+      )}
+
+      {betSlip && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-end justify-center transition-all duration-300">
+          <div className="bg-[#151620] border-t border-[#00E5FF]/30 w-full max-w-md rounded-t-3xl p-6 space-y-6 shadow-[0_-10px_30px_rgba(0,229,255,0.15)]" style={{ animation: 'slideUp 0.3s ease-out' }}>
+            
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="text-[10px] text-[#00E5FF] tracking-widest uppercase font-bold">КУПОН СТАВКИ</span>
+                <h4 className="text-sm font-black text-white">{betSlip.match.teamA} vs {betSlip.match.teamB}</h4>
+              </div>
+              <button 
+                onClick={() => { triggerHaptic(); setBetSlip(null); }}
+                className="text-slate-400 hover:text-white text-sm bg-slate-900 px-3 py-1 rounded-lg border border-[#2A2B36]"
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <div className="bg-slate-900/60 p-3.5 rounded-2xl border border-[#2A2B36] flex justify-between items-center text-xs">
+              <div>
+                <span className="text-slate-500 block">Ваш прогноз:</span>
+                <span className="text-white font-black">
+                  {betSlip.prediction === 'teamA' ? betSlip.match.teamA : betSlip.prediction === 'teamB' ? betSlip.match.teamB : 'Ничья'}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-slate-500 block">Коэффициент:</span>
+                <span className="text-[#00FF87] font-black text-lg">{betSlip.odds}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>Сумма ставки (в ★ Stars)</span>
+                <span>Доступно: ★ {userBalance}</span>
+              </div>
+              
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg text-amber-400">★</span>
+                <input 
+                  type="number"
+                  value={betAmount}
+                  onChange={(e) => setBetAmount(e.target.value)}
+                  className="w-full bg-slate-900/80 border border-[#2A2B36] focus:border-[#00E5FF] outline-none rounded-xl py-3.5 pl-10 pr-4 text-white font-extrabold text-sm"
+                  placeholder="Введите сумму"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center text-xs bg-[#1C1D2A] p-3 rounded-xl">
+              <span className="text-slate-400">Возможная выплата:</span>
+              <span className="text-[#00FF87] font-black text-sm">
+                ★ {Math.floor((parseFloat(betAmount) || 0) * betSlip.odds)}
+              </span>
+            </div>
+
+            <button 
               onClick={handlePlaceBet}
-              style={{
-                width: '100%',
-                background: 'linear-gradient(135deg, #00f3ff, #bf77ff)',
-                color: '#000000',
-                fontWeight: 'bold',
-                fontSize: '18px',
-                padding: '16px',
-                borderRadius: '12px',
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 0 30px rgba(0, 243, 255, 0.3)',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 0 50px rgba(0, 243, 255, 0.5)'}
-              onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 0 30px rgba(0, 243, 255, 0.3)'}
+              className="w-full bg-gradient-to-r from-[#00E5FF] to-[#0087FF] text-black rounded-2xl py-4 font-black tracking-wide text-sm active:scale-95 transition-all duration-150 shadow-[0_0_20px_rgba(0,229,255,0.25)]"
             >
-              🔥 Сделать ставку на ⭐️ {betAmount || '0'}
+              Сделать ставку на ★ {betAmount || 0}
             </button>
           </div>
         </div>
       )}
-    </div>
-  );
 
-  const renderMyBetsTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f59e0b', letterSpacing: '-0.5px' }}>
-        🎟️ Мои ставки
-      </div>
+      {showWalletModal && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#151620] border border-[#2A2B36] rounded-3xl p-6 w-full max-w-sm space-y-5">
+            <h4 className="text-md font-black text-white">
+              {walletModalAction === 'deposit' ? 'Пополнить баланс через Telegram' : 'Вывести звезды из приложения'}
+            </h4>
+            
+            <p className="text-xs text-slate-400">
+              {walletModalAction === 'deposit' 
+                ? 'Укажите количество звезд, которое вы хотите внести на баланс через встроенную платежную систему Stars.' 
+                : 'Ваша заявка будет отправлена на модерацию. Средства переведутся на ваш ТГ баланс.'}
+            </p>
 
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <button
-          onClick={() => setBetFilter('active')}
-          style={{
-            flex: 1,
-            padding: '10px',
-            borderRadius: '12px',
-            border: betFilter === 'active' ? '1px solid #00f3ff' : '1px solid #231c3c',
-            background: betFilter === 'active' ? '#00f3ff20' : '#141023',
-            color: betFilter === 'active' ? '#00f3ff' : '#6b7280',
-            fontWeight: betFilter === 'active' ? 'bold' : 'normal',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}
-        >
-          Активные ⏳
-        </button>
-        <button
-          onClick={() => setBetFilter('history')}
-          style={{
-            flex: 1,
-            padding: '10px',
-            borderRadius: '12px',
-            border: betFilter === 'history' ? '1px solid #00f3ff' : '1px solid #231c3c',
-            background: betFilter === 'history' ? '#00f3ff20' : '#141023',
-            color: betFilter === 'history' ? '#00f3ff' : '#6b7280',
-            fontWeight: betFilter === 'history' ? 'bold' : 'normal',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}
-        >
-          Рассчитанные ✅
-        </button>
-      </div>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg text-amber-400">★</span>
+              <input 
+                type="number"
+                value={starsAmountInput}
+                onChange={(e) => setStarsAmountInput(e.target.value)}
+                className="w-full bg-slate-900/80 border border-[#2A2B36] focus:border-amber-400 outline-none rounded-xl py-3 pl-10 pr-4 text-white font-extrabold text-sm"
+              />
+            </div>
 
-      {bets.filter(b => betFilter === 'active' ? b.status === 'active' : b.status !== 'active').length === 0 ? (
-        <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-          {betFilter === 'active' ? 'Нет активных ставок' : 'Нет рассчитанных ставок'}
-        </div>
-      ) : (
-        bets.filter(b => betFilter === 'active' ? b.status === 'active' : b.status !== 'active').map(bet => (
-          <div key={bet.id} style={{
-            background: bet.status === 'won' ? '#10b98120' : bet.status === 'lost' ? '#ef444420' : '#141023',
-            border: `1px solid ${getBetStatusColor(bet.status)}40`,
-            borderRadius: '16px',
-            padding: '16px'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: 'bold', color: '#ffffff' }}>{bet.matchName}</div>
-                <div style={{ fontSize: '12px', color: '#6b7280' }}>Ставка на: {bet.selectedTeam}</div>
-                <div style={{ fontSize: '12px', color: '#6b7280' }}>КФ: {bet.coefficient.toFixed(2)} • {bet.date}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ color: '#eab308', fontWeight: 'bold' }}>⭐️ {bet.amount}</div>
-                {bet.status === 'won' && (
-                  <div style={{ color: '#10b981', fontWeight: 'bold', fontSize: '14px' }}>+ ⭐️ {bet.potentialWin} Выигрыш!</div>
-                )}
-                {bet.status === 'lost' && (
-                  <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '14px' }}>Проиграна</div>
-                )}
-                {bet.status === 'active' && (
-                  <div style={{ color: '#00f3ff', fontWeight: 'bold', fontSize: '14px' }}>Активна</div>
-                )}
-              </div>
+            <div className="flex space-x-3">
+              <button 
+                onClick={() => { triggerHaptic(); setShowWalletModal(false); }}
+                className="w-1/2 bg-[#1C1D2A] border border-[#2A2B36] text-white rounded-xl py-2.5 text-xs font-bold"
+              >
+                Отмена
+              </button>
+              <button 
+                onClick={handleWalletAction}
+                className="w-1/2 bg-amber-500 text-black rounded-xl py-2.5 text-xs font-extrabold"
+              >
+                Подтвердить
+              </button>
             </div>
           </div>
-        ))
+        </div>
       )}
-    </div>
-  );
 
-  const renderProfileTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#bf77ff', letterSpacing: '-0.5px' }}>
-        👤 Профиль
-      </div>
-
-      {/* Аватар и баланс */}
-      <div style={{
-        background: '#141023',
-        border: '1px solid #231c3c',
-        borderRadius: '16px',
-        padding: '24px',
-        textAlign: 'center',
-        position: 'relative',
-        overflow: 'hidden'
-      }}>
-        <div style={{
-          position: 'absolute',
-          top: -50,
-          right: -50,
-          width: '150px',
-          height: '150px',
-          background: 'radial-gradient(circle, #00f3ff20, transparent 70%)',
-          borderRadius: '50%',
-          pointerEvents: 'none'
-        }} />
-        <div style={{
-          width: '80px',
-          height: '80px',
-          margin: '0 auto',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #00f3ff, #bf77ff)',
-          padding: '3px',
-          boxShadow: '0 0 30px rgba(0, 243, 255, 0.3)'
-        }}>
-          <div style={{
-            width: '100%',
-            height: '100%',
-            borderRadius: '50%',
-            background: '#141023',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '32px',
-            fontWeight: 'bold',
-            color: '#ffffff'
-          }}>
-            {tgUser?.first_name?.[0] || tgUser?.username?.[0] || 'U'}
-          </div>
-        </div>
-        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ffffff', marginTop: '8px' }}>
-          {tgUser?.first_name || 'Пользователь'} {tgUser?.last_name || ''}
-        </div>
-        <div style={{ color: '#6b7280', fontSize: '14px' }}>@{tgUser?.username || 'нет_username'}</div>
-        <div style={{
-          marginTop: '12px',
-          background: '#1a142f',
-          border: '1px solid #231c3c',
-          borderRadius: '12px',
-          padding: '12px'
-        }}>
-          <div style={{ color: '#6b7280', fontSize: '14px' }}>Баланс</div>
-          <div style={{ color: '#eab308', fontWeight: 'bold', fontSize: '28px' }}>⭐️ {balance.toLocaleString()} Stars</div>
-        </div>
-        <button
-          onClick={() => {
-            const amount = prompt('Введите сумму пополнения в Звёздах:');
-            if (amount) {
-              const val = parseFloat(amount);
-              if (!isNaN(val) && val > 0) {
-                setBalance(balance + val);
-                alert(`Пополнено на ⭐️ ${val} Stars`);
-              }
-            }
-          }}
-          style={{
-            marginTop: '12px',
-            width: '100%',
-            background: '#00f3ff20',
-            color: '#00f3ff',
-            border: '1px solid #00f3ff40',
-            borderRadius: '12px',
-            padding: '12px',
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#00f3ff30'}
-          onMouseLeave={(e) => e.currentTarget.style.background = '#00f3ff20'}
+      <footer className="h-16 border-t border-[#2A2B36] bg-[#15161E] fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around shrink-0">
+        <button 
+          onClick={() => { triggerHaptic(); setSelectedMatch(null); setActiveTab('dashboard'); }} 
+          className="flex flex-col items-center justify-center w-20 h-full space-y-1"
         >
-          💰 Пополнить баланс через Telegram Stars
+          <Icons.Dashboard active={activeTab === 'dashboard'} />
+          <span className={`text-[10px] font-bold ${activeTab === 'dashboard' ? 'text-[#00E5FF]' : 'text-slate-400'}`}>События</span>
         </button>
-      </div>
 
-      {/* Статистика */}
-      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px' }}>
-        <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffffff', marginBottom: '8px' }}>📊 Статистика</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-          <div style={{ textAlign: 'center', background: '#1a142f', borderRadius: '12px', padding: '8px' }}>
-            <div style={{ color: '#6b7280', fontSize: '12px' }}>Всего ставок</div>
-            <div style={{ color: '#00f3ff', fontWeight: 'bold', fontSize: '18px' }}>{bets.length}</div>
-          </div>
-          <div style={{ textAlign: 'center', background: '#1a142f', borderRadius: '12px', padding: '8px' }}>
-            <div style={{ color: '#6b7280', fontSize: '12px' }}>ROI</div>
-            <div style={{ color: '#10b981', fontWeight: 'bold', fontSize: '18px' }}>+68%</div>
-          </div>
-          <div style={{ textAlign: 'center', background: '#1a142f', borderRadius: '12px', padding: '8px' }}>
-            <div style={{ color: '#6b7280', fontSize: '12px' }}>Макс. КФ</div>
-            <div style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: '18px' }}>2.80</div>
-          </div>
-        </div>
-      </div>
+        <button 
+          onClick={() => { triggerHaptic(); setSelectedMatch(null); setActiveTab('my-bets'); }} 
+          className="flex flex-col items-center justify-center w-20 h-full space-y-1"
+        >
+          <Icons.MyBets active={activeTab === 'my-bets'} />
+          <span className={`text-[10px] font-bold ${activeTab === 'my-bets' ? 'text-[#00E5FF]' : 'text-slate-400'}`}>Мои ставки</span>
+        </button>
 
-      {/* Реферальная система */}
-      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '16px' }}>
-        <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#f59e0b', marginBottom: '8px' }}>
-          🔗 Пригласи друга и получай 10% от его ставок
-        </div>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-          <input
-            type="text"
-            value={referralLink}
-            readOnly
-            style={{
-              flex: 1,
-              background: '#1a142f',
-              border: '1px solid #231c3c',
-              borderRadius: '12px',
-              padding: '10px',
-              color: '#6b7280',
-              fontSize: '12px',
-              outline: 'none'
-            }}
-          />
-          <button
-            onClick={handleCopyReferralLink}
-            style={{
-              background: '#00f3ff20',
-              color: '#00f3ff',
-              border: '1px solid #00f3ff40',
-              borderRadius: '12px',
-              padding: '10px 16px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#00f3ff30'}
-            onMouseLeave={(e) => e.currentTarget.style.background = '#00f3ff20'}
-          >
-            🔗 Копировать
-          </button>
-        </div>
-        {copyStatus && (
-          <div style={{ color: '#10b981', fontSize: '14px', textAlign: 'center', marginBottom: '8px' }}>
-            ✅ {copyStatus}
-          </div>
-        )}
-        <div style={{ fontSize: '14px', fontWeight: '500', color: '#ffffff', marginBottom: '8px' }}>
-          Приглашенные друзья:
-        </div>
-        {referrals.map(ref => (
-          <div key={ref.id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #231c3c', padding: '6px 0' }}>
-            <span style={{ color: '#ffffff', fontSize: '14px' }}>{ref.username}</span>
-            <span style={{ color: '#6b7280', fontSize: '12px' }}>{ref.date} • {ref.bets} ставок</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderRulesTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#10b981', letterSpacing: '-0.5px' }}>
-        ℹ️ Правила и поддержка
-      </div>
-
-      <div style={{ background: '#141023', border: '1px solid #231c3c', borderRadius: '16px', padding: '20px' }}>
-        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ffffff', marginBottom: '12px' }}>
-          📋 Как рассчитываются ставки
-        </div>
-        <div style={{ color: '#6b7280', fontSize: '14px', lineHeight: '1.6' }}>
-          <p style={{ marginBottom: '8px' }}>1. Все ставки принимаются в Звёздах Telegram (⭐️ Stars).</p>
-          <p style={{ marginBottom: '8px' }}>2. Коэффициенты обновляются в реальном времени в зависимости от хода матча.</p>
-          <p style={{ marginBottom: '8px' }}>3. Ставка считается выигрышной, если выбранная команда побеждает по итогу матча.</p>
-          <p style={{ marginBottom: '8px' }}>4. При ничьей в спортивных матчах ставки возвращаются с коэффициентом 1.00.</p>
-          <p style={{ marginBottom: '8px' }}>5. Расчет происходит автоматически после завершения матча.</p>
-          <p>6. В случае спорной ситуации решение принимает арбитр @SafeHold_Bet_Support.</p>
-        </div>
-      </div>
-
-      <button
-        onClick={() => window.open('https://t.me/SafeHold_Bet_Support', '_blank')}
-        style={{
-          background: '#00f3ff20',
-          color: '#00f3ff',
-          border: '1px solid #00f3ff40',
-          fontWeight: 'bold',
-          padding: '16px',
-          borderRadius: '12px',
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-          fontSize: '16px'
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.background = '#00f3ff30'}
-        onMouseLeave={(e) => e.currentTarget.style.background = '#00f3ff20'}
-      >
-        📞 Связаться с поддержкой @SafeHold_Bet_Support
-      </button>
-    </div>
-  );
-
-  // ------------------------------------------------------------
-  // ОСНОВНАЯ ОТРИСОВКА
-  // ------------------------------------------------------------
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#0b0813',
-      color: '#ffffff',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      paddingBottom: '80px',
-      overflowX: 'hidden',
-      maxWidth: '100vw'
-    }}>
-      <div style={{ maxWidth: '420px', margin: '0 auto', padding: '16px 16px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#00f3ff', letterSpacing: '-0.5px' }}>
-            ⚡ SafeHold Bet
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: '#eab308', fontSize: '14px' }}>⭐️ {balance}</span>
-            <span style={{ color: '#6b7280', fontSize: '12px' }}>v1.0</span>
-          </div>
-        </div>
-
-        {currentTab === 'line' && renderLineTab()}
-        {currentTab === 'mybets' && renderMyBetsTab()}
-        {currentTab === 'profile' && renderProfileTab()}
-        {currentTab === 'rules' && renderRulesTab()}
-      </div>
-
-      {/* Нижний таб-бар - 4 кнопки */}
-      <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        maxWidth: '420px',
-        margin: '0 auto',
-        background: '#141023',
-        borderTop: '1px solid #231c3c',
-        display: 'flex',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        padding: '8px 4px',
-        zIndex: 50,
-        backdropFilter: 'blur(12px)',
-        borderRadius: '24px 24px 0 0'
-      }}>
-        {[
-          { id: 'line', icon: '🔥', label: 'Линия' },
-          { id: 'mybets', icon: '🎟️', label: 'Мои ставки' },
-          { id: 'profile', icon: '👤', label: 'Профиль' },
-          { id: 'rules', icon: 'ℹ️', label: 'Правила' }
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setCurrentTab(tab.id as any)}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              padding: '8px 12px',
-              borderRadius: '16px',
-              background: currentTab === tab.id ? '#00f3ff20' : 'transparent',
-              border: currentTab === tab.id ? '1px solid #00f3ff40' : '1px solid transparent',
-              cursor: 'pointer',
-              transition: 'all 0.3s',
-              flex: 1,
-              maxWidth: '80px'
-            }}
-            onMouseEnter={(e) => {
-              if (currentTab !== tab.id) {
-                e.currentTarget.style.background = '#ffffff08';
-                e.currentTarget.style.border = '1px solid #ffffff10';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (currentTab !== tab.id) {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.border = '1px solid transparent';
-              }
-            }}
-          >
-            <span style={{ fontSize: '24px' }}>{tab.icon}</span>
-            <span style={{
-              fontSize: '10px',
-              fontWeight: '600',
-              marginTop: '2px',
-              color: currentTab === tab.id ? '#00f3ff' : '#6b7280',
-              transition: 'color 0.3s'
-            }}>
-              {tab.label}
-            </span>
-            {currentTab === tab.id && (
-              <span style={{
-                width: '4px',
-                height: '4px',
-                borderRadius: '50%',
-                background: '#00f3ff',
-                marginTop: '2px',
-                animation: 'pulseGlow 1.5s infinite'
-              }} />
-            )}
-          </button>
-        ))}
-      </div>
+        <button 
+          onClick={() => { triggerHaptic(); setSelectedMatch(null); setActiveTab('wallet'); }} 
+          className="flex flex-col items-center justify-center w-20 h-full space-y-1"
+        >
+          <Icons.Wallet active={activeTab === 'wallet'} />
+          <span className={`text-[10px] font-bold ${activeTab === 'wallet' ? 'text-[#00E5FF]' : 'text-slate-400'}`}>Кошелек</span>
+        </button>
+      </footer>
 
       <style>{`
-        @keyframes pulseGlow {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 1; }
-        }
         @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
+          from { opacity: 0; transform: translateY(40px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        * {
-          -webkit-tap-highlight-color: transparent;
-        }
-        input, textarea, button {
-          -webkit-appearance: none;
-          appearance: none;
-        }
       `}</style>
+
     </div>
   );
-};
-
-export default App;
+}
